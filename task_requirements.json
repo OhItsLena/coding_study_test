@@ -1,5 +1,5 @@
 {
-  "tasks": [
+  "stage1_tasks": [
     {
       "id": 1,
       "title": "Basic Setup",
@@ -43,6 +43,55 @@
         "Implement try-catch blocks for user input validation",
         "Add type hints to function parameters and return values",
         "Create a README.md file explaining how to use your calculator"
+      ]
+    }
+  ],
+  "stage2_tasks": [
+    {
+      "id": 1,
+      "title": "Code Review & Refactoring",
+      "description": "Review the existing calculator code and refactor it for better maintainability and performance.",
+      "details": [
+        "Examine the existing calculator.py file",
+        "Identify areas for improvement in code structure",
+        "Refactor functions to follow Python best practices",
+        "Optimize any inefficient code patterns"
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Advanced Features",
+      "description": "Add advanced mathematical operations to the calculator.",
+      "details": [
+        "Implement power/exponentiation function",
+        "Add square root calculation",
+        "Implement modulo operation",
+        "Add factorial calculation function",
+        "Test all new functions thoroughly"
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Data Persistence",
+      "description": "Add the ability to save and load calculation history.",
+      "details": [
+        "Create a history tracking system",
+        "Implement save history to file functionality",
+        "Add load previous calculations feature",
+        "Allow users to clear calculation history",
+        "Display recent calculations in the interface"
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Testing & Validation",
+      "description": "Create comprehensive unit tests and improve code validation.",
+      "details": [
+        "Write unit tests for all calculator functions",
+        "Test edge cases and error conditions",
+        "Add input validation for all user inputs",
+        "Create automated test suite",
+        "Document test coverage and results"
       ]
     }
   ]
