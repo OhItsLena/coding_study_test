@@ -1,0 +1,315 @@
+{% extends "base.jinja" %}
+
+{% block title %}{{ participant_id }} - Coding Task{% endblock %}
+
+{% block additional_styles %}
+.task-card {
+    text-align: left;
+}
+h1 {
+    text-align: center;
+}
+.participant-id {
+    text-align: center;
+}
+.coding-reminder {
+    background: rgba(248, 249, 250, 0.95);
+    border: none;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    font-size: 0.9em;
+    color: #495057;
+    text-align: center;
+    position: sticky;
+    top: 10px;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid transparent;
+}
+.coding-reminder.vibe {
+    border-left-color: #6f42c1;
+    background: rgba(111, 66, 193, 0.08);
+}
+.coding-reminder.ai-assisted {
+    border-left-color: #17a2b8;
+    background: rgba(23, 162, 184, 0.08);
+}
+.progress-bar {
+    background: #e9ecef;
+    border-radius: 10px;
+    height: 20px;
+    margin: 20px 0;
+    overflow: hidden;
+}
+.progress-fill {
+    background: linear-gradient(90deg, #28a745, #20c997);
+    height: 100%;
+    transition: width 0.3s ease;
+}
+.task-requirement {
+    background: white;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 25px;
+    margin: 20px 0;
+    position: relative;
+}
+.task-requirement.completed {
+    border-color: #28a745;
+    background: #f8fff9;
+}
+.task-requirement.current {
+    border-color: #007bff;
+    background: #f8f9ff;
+    box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+}
+.task-requirement.locked {
+    background: #f8f8f8;
+    color: #6c757d;
+    border-color: #e9ecef;
+}
+.task-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+.task-number {
+    background: #007bff;
+    color: white;
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    margin-right: 15px;
+    flex-shrink: 0;
+}
+.task-number.completed {
+    background: #28a745;
+}
+.task-number.locked {
+    background: #6c757d;
+}
+.task-title {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: #333;
+    margin: 0;
+}
+.task-description {
+    margin: 15px 0;
+    line-height: 1.6;
+    color: #555;
+}
+.task-details {
+    margin-top: 15px;
+}
+.task-details ul {
+    margin: 10px 0;
+    padding-left: 25px;
+}
+.task-details li {
+    margin: 8px 0;
+    color: #666;
+}
+.complete-button {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    margin-top: 15px;
+}
+.complete-button:hover {
+    background: #218838;
+}
+.locked-message {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 5px;
+    padding: 15px;
+    margin-top: 15px;
+    color: #856404;
+}
+.status-badge {
+    font-size: 0.8em;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+    margin-left: 10px;
+}
+.status-completed {
+    background: #d4edda;
+    color: #155724;
+}
+.status-current {
+    background: #cce7ff;
+    color: #004085;
+}
+.status-locked {
+    background: #e2e3e5;
+    color: #6c757d;
+}
+.task-title {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: #333;
+    margin: 0;
+}
+.task-description {
+    margin: 15px 0;
+    line-height: 1.6;
+    color: #555;
+}
+.task-details {
+    margin-top: 15px;
+}
+.task-details ul {
+    margin: 10px 0;
+    padding-left: 25px;
+}
+.task-details li {
+    margin: 8px 0;
+    color: #666;
+}
+.complete-button {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    margin-top: 15px;
+}
+.complete-button:hover {
+    background: #218838;
+}
+.locked-message {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 5px;
+    padding: 15px;
+    margin-top: 15px;
+    color: #856404;
+}
+.status-badge {
+    font-size: 0.8em;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+    margin-left: 10px;
+}
+.status-completed {
+    background: #d4edda;
+    color: #155724;
+}
+.status-current {
+    background: #cce7ff;
+    color: #004085;
+}
+.status-locked {
+    background: #e2e3e5;
+    color: #6c757d;
+}
+{% endblock %}
+
+{% block content %}
+<div class="task-card">
+    {% if coding_condition == 'vibe' %}
+    <div class="coding-reminder vibe">
+        🔮 <strong>Vibe Coding:</strong> Trust your intuition and code naturally. Focus on understanding and creative problem-solving.
+    </div>
+    {% elif coding_condition == 'ai-assisted' %}
+    <div class="coding-reminder ai-assisted">
+        🤖 <strong>AI-Assisted Coding:</strong> Leverage AI tools and assistance. Use copilot, autocomplete, and other AI features to enhance your coding.
+    </div>
+    {% endif %}
+    
+    <h1>Coding Task</h1>
+    <div class="participant-id">Participant ID: {{ participant_id }}</div>
+    
+    <div class="progress-section">
+        <h3>Progress: {{ completed_tasks|length }} of {{ total_tasks }} tasks completed</h3>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ (completed_tasks|length / total_tasks * 100)|round(1) }}%"></div>
+        </div>
+    </div>
+    
+    {% for requirement in task_requirements %}
+    <div class="task-requirement 
+        {% if requirement.id in completed_tasks %}completed
+        {% elif requirement.id == current_task %}current
+        {% elif requirement.id > current_task %}locked
+        {% endif %}">
+        
+        <div class="task-header">
+            <div class="task-number 
+                {% if requirement.id in completed_tasks %}completed
+                {% elif requirement.id > current_task %}locked
+                {% endif %}">
+                {% if requirement.id in completed_tasks %}✓{% else %}{{ requirement.id }}{% endif %}
+            </div>
+            <h3 class="task-title">{{ requirement.title }}</h3>
+            {% if requirement.id in completed_tasks %}
+                <span class="status-badge status-completed">Completed</span>
+            {% elif requirement.id == current_task %}
+                <span class="status-badge status-current">Current Task</span>
+            {% else %}
+                <span class="status-badge status-locked">Locked</span>
+            {% endif %}
+        </div>
+        
+        {% if requirement.id <= current_task %}
+            <div class="task-description">
+                {{ requirement.description }}
+            </div>
+            
+            <div class="task-details">
+                <strong>Requirements:</strong>
+                <ul>
+                    {% for detail in requirement.details %}
+                    <li>{{ detail }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            
+            {% if requirement.id == current_task and requirement.id not in completed_tasks %}
+            <form method="POST" action="/complete-task" style="margin-top: 15px;">
+                <input type="hidden" name="task_id" value="{{ requirement.id }}">
+                <button type="submit" class="complete-button">
+                    Mark as Complete
+                </button>
+            </form>
+            {% endif %}
+        {% else %}
+            <div class="locked-message">
+                <strong>🔒 This task is locked.</strong><br>
+                Complete the previous task to unlock this requirement.
+            </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    
+    {% if completed_tasks|length == total_tasks %}
+    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+        <h3 style="color: #155724; margin-bottom: 10px;">🎉 Congratulations!</h3>
+        <p style="color: #155724; margin: 0;">You have completed all coding tasks. Great work!</p>
+    </div>
+    {% endif %}
+    
+    <div class="nav-buttons">
+        <div>
+            {% if completed_tasks|length == total_tasks %}
+                <a href="/ux-questionnaire" class="btn btn-success" style="margin-left: 10px;">Complete UX Survey →</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

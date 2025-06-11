@@ -1,0 +1,28 @@
+{% extends "base.jinja" %}
+
+{% block title %}{{ participant_id }} - Welcome{% endblock %}
+
+{% block additional_styles %}
+.start-btn {
+    background: #007bff;
+    color: white;
+    padding: 12px 30px;
+    border: none;
+    border-radius: 5px;
+    font-size: 1.1em;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+.start-btn:hover {
+    background: #0056b3;
+}
+{% endblock %}
+
+{% block content %}
+<div class="welcome-card">
+    <h1>Welcome to the Study</h1>
+    <div class="participant-id">Participant ID: {{ participant_id }}</div>
+    <a href="/background-questionnaire" class="start-btn">Start Session →</a>
+</div>
+{% endblock %}

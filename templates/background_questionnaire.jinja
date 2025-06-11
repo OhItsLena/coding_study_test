@@ -1,0 +1,18 @@
+{% extends "base.jinja" %}
+
+{% block title %}{{ participant_id }} - Background Survey{% endblock %}
+
+{% block additional_styles %}
+/* No additional styles needed - using base styles */
+{% endblock %}
+
+{% block content %}
+<div class="survey-card">
+    <h1>Background Survey</h1>
+    <div class="participant-id">Participant ID: {{ participant_id }}</div>
+    
+    <div class="nav-buttons">
+        <a href="{{ url }}?participant={{ participant_id }}" class="btn btn-primary">Start Survey →</a>
+    </div>
+</div>
+{% endblock %}

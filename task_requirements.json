@@ -1,0 +1,49 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Basic Setup",
+      "description": "Create a simple Python function that takes two numbers as input and returns their sum. Name the function 'add_numbers'.",
+      "details": [
+        "Create a new Python file called 'calculator.py'",
+        "Define a function named 'add_numbers' that takes two parameters",
+        "The function should return the sum of the two parameters",
+        "Test your function with a few examples"
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Extend Functionality",
+      "description": "Add subtraction, multiplication, and division functions to your calculator.",
+      "details": [
+        "Add a 'subtract_numbers' function",
+        "Add a 'multiply_numbers' function",
+        "Add a 'divide_numbers' function (handle division by zero)",
+        "Test all functions with various inputs"
+      ]
+    },
+    {
+      "id": 3,
+      "title": "User Interface",
+      "description": "Create a simple command-line interface for your calculator.",
+      "details": [
+        "Create a main function that displays a menu of operations",
+        "Allow the user to select an operation",
+        "Prompt the user for two numbers",
+        "Display the result and ask if they want to perform another calculation",
+        "Handle invalid inputs gracefully"
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Handling & Documentation",
+      "description": "Add comprehensive error handling and documentation to your calculator.",
+      "details": [
+        "Add docstrings to all functions",
+        "Implement try-catch blocks for user input validation",
+        "Add type hints to function parameters and return values",
+        "Create a README.md file explaining how to use your calculator"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{% extends "base.jinja" %}
+
+{% block title %}{{ participant_id }} - Background Survey{% endblock %}
+
+{% block additional_styles %}
+.error-card {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    padding: 20px;
+    border-radius: 5px;
+    color: #856404;
+}
+{% endblock %}
+
+{% block content %}
+<div class="error-card">
+    <h1>Background Survey - {{ participant_id }}</h1>
+    <p>Survey URL not configured. Please set the SURVEY_URL environment variable.</p>
+</div>
+{% endblock %}

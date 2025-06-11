@@ -1,0 +1,32 @@
+{% extends "base.jinja" %}
+
+{% block title %}{{ participant_id }} - Post-Task UX Survey{% endblock %}
+
+{% block additional_styles %}
+.completion-message {
+    font-size: 1.1em;
+    color: #28a745;
+    margin-bottom: 20px;
+    font-weight: bold;
+}
+.btn-secondary {
+    margin-right: 10px;
+}
+{% endblock %}
+
+{% block content %}
+<div class="survey-card">
+    <h1>Post-Task UX Survey</h1>
+    <div class="participant-id">Participant ID: {{ participant_id }}</div>
+    
+    <div class="completion-message">
+        🎉 Congratulations! You have completed all coding tasks.
+    </div>
+    
+    <p>Please complete this final survey about your experience with the coding environment and tools.</p>
+    
+    <div class="nav-buttons">
+        <a href="{{ url }}?participant={{ participant_id }}" class="btn btn-primary">Start UX Survey →</a>
+    </div>
+</div>
+{% endblock %}
