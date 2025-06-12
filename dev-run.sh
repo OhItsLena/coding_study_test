@@ -10,10 +10,17 @@ export DEVELOPMENT_MODE=true
 export DEV_PARTICIPANT_ID=dev-participant
 export SURVEY_URL=https://example.com/dev-survey
 export UX_SURVEY_URL=https://example.com/dev-ux-survey
+export GITHUB_ORG=LMU-Vibe-Coding-Study
+# Note: Set GITHUB_TOKEN in your .env file or export it manually for authentication
 
 echo "Starting Flask app in development mode..."
 echo "Participant ID will be mocked as: $DEV_PARTICIPANT_ID"
 echo "Repository will be cloned to current directory"
+if [ -z "$GITHUB_TOKEN" ]; then
+    echo "Warning: GITHUB_TOKEN not set - will use public repository access only"
+else
+    echo "GitHub authentication configured for CodingStudyBot"
+fi
 echo ""
 
 # Start the Flask application

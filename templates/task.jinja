@@ -12,6 +12,74 @@ h1 {
 .participant-id {
     text-align: center;
 }
+.timer-section {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 20px 0;
+    text-align: center;
+}
+.timer-display {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #28a745;
+    margin: 10px 0;
+}
+.timer-warning {
+    color: #ffc107;
+}
+.timer-danger {
+    color: #dc3545;
+}
+.timer-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+.timer-modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 500px;
+    text-align: center;
+}
+.timer-modal h3 {
+    color: #dc3545;
+    margin-bottom: 15px;
+}
+.timer-modal-buttons {
+    margin-top: 20px;
+}
+.timer-modal-buttons button {
+    margin: 0 10px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+}
+.btn-continue-survey {
+    background: #28a745;
+    color: white;
+}
+.btn-continue-survey:hover {
+    background: #218838;
+}
+.btn-finish-task {
+    background: #6c757d;
+    color: white;
+}
+.btn-finish-task:hover {
+    background: #5a6268;
+}
 .coding-reminder {
     background: rgba(248, 249, 250, 0.95);
     border: none;
@@ -26,7 +94,6 @@ h1 {
     z-index: 100;
     backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    border-left: 4px solid transparent;
 }
 .coding-reminder.vibe {
     border-left-color: #6f42c1;
@@ -218,6 +285,31 @@ h1 {
     background: #e2e3e5;
     color: #6c757d;
 }
+.open-vscode-btn {
+    background: #17a2b8;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9em;
+    margin-left: 10px;
+    text-decoration: none;
+    display: inline-block;
+}
+.open-vscode-btn:hover {
+    background: #138496;
+    color: white;
+    text-decoration: none;
+}
+.coding-tools {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 20px 0;
+    text-align: center;
+}
 {% endblock %}
 
 {% block content %}
@@ -235,6 +327,12 @@ h1 {
     <h1>Coding Task</h1>
     <div class="participant-id">Participant ID: {{ participant_id }}</div>
     
+    <div class="timer-section">
+        <h4>⏰ Session Timer</h4>
+        <div id="timer-display" class="timer-display">40:00</div>
+        <p><small>You have 40 minutes to complete as many tasks as possible</small></p>
+    </div>
+    
     <div class="progress-section">
         <h3>Progress: {{ completed_tasks|length }} of {{ total_tasks }} tasks completed</h3>
         <div class="progress-bar">
@@ -242,12 +340,20 @@ h1 {
         </div>
     </div>
     
+    <div class="coding-tools">
+        <h4>🛠️ Coding Environment</h4>
+        <p>Your repository should open automatically in VS Code. If it doesn't, click the button below:</p>
+        <a href="/open-vscode" class="open-vscode-btn">📝 Open VS Code</a>
+        <br><br>
+        <small>Repository location: study-{{ participant_id }}</small>
+    </div>
+    
     {% for requirement in task_requirements %}
     <div class="task-requirement 
         {% if requirement.id in completed_tasks %}completed
         {% elif requirement.id == current_task %}current
         {% elif requirement.id > current_task %}locked
-        {% endif %}">
+        {% endif %}" data-task-id="{{ requirement.id }}">
         
         <div class="task-header">
             <div class="task-number 
@@ -308,8 +414,167 @@ h1 {
         <div>
             {% if completed_tasks|length == total_tasks %}
                 <a href="/ux-questionnaire" class="btn btn-success" style="margin-left: 10px;">Complete UX Survey →</a>
+            {% elif timer_finished and current_task in completed_tasks %}
+                <a href="/ux-questionnaire" class="btn btn-success" style="margin-left: 10px;">Complete UX Survey →</a>
             {% endif %}
         </div>
     </div>
 </div>
+
+<!-- Timer Modal -->
+<div id="timer-modal" class="timer-modal">
+    <div class="timer-modal-content">
+        <h3>⏰ Time's Up!</h3>
+        <p>You've reached the 40-minute time limit for the coding session.</p>
+        <p>You can either:</p>
+        <div class="timer-modal-buttons">
+            <button id="btn-continue-survey" class="btn-continue-survey">
+                Go to UX Survey Now
+            </button>
+            <button id="btn-finish-task" class="btn-finish-task">
+                Finish Current Task First
+            </button>
+        </div>
+        <p><small>If you choose to finish the current task, you won't be able to start new tasks.</small></p>
+    </div>
+</div>
+
+<script>
+let timerInterval;
+let remainingTime = {{ remaining_time }};
+let timerFinished = {{ timer_finished|lower }};
+let modalShown = false;
+
+function formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+function updateTimerDisplay() {
+    const timerDisplay = document.getElementById('timer-display');
+    
+    if (remainingTime <= 0) {
+        timerDisplay.textContent = '0:00';
+        timerDisplay.className = 'timer-display timer-danger';
+        
+        if (!modalShown && !timerFinished) {
+            showTimerModal();
+            modalShown = true;
+        }
+        
+        // Disable new task buttons if timer is finished
+        if (timerFinished) {
+            disableNewTasks();
+        }
+        
+        return;
+    }
+    
+    timerDisplay.textContent = formatTime(remainingTime);
+    
+    // Change color based on remaining time
+    if (remainingTime <= 300) { // 5 minutes
+        timerDisplay.className = 'timer-display timer-danger';
+    } else if (remainingTime <= 600) { // 10 minutes
+        timerDisplay.className = 'timer-display timer-warning';
+    } else {
+        timerDisplay.className = 'timer-display';
+    }
+}
+
+function showTimerModal() {
+    document.getElementById('timer-modal').style.display = 'block';
+    
+    // Send notification to server that timer expired
+    fetch('/timer-expired', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    });
+}
+
+function disableNewTasks() {
+    // Hide all locked tasks when timer expires and user chooses to continue
+    const taskRequirements = document.querySelectorAll('.task-requirement');
+    const currentTaskId = {{ current_task }};
+    
+    taskRequirements.forEach((taskReq) => {
+        const taskId = parseInt(taskReq.getAttribute('data-task-id'));
+        if (taskId > currentTaskId) {
+            // Hide the entire locked task
+            taskReq.style.display = 'none';
+        }
+    });
+    
+    // Add notice about no new tasks
+    const existingNotice = document.querySelector('.timer-expired-notice');
+    if (!existingNotice) {
+        const notice = document.createElement('div');
+        notice.className = 'timer-expired-notice';
+        notice.style.cssText = 'background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center; color: #856404;';
+        notice.innerHTML = '<strong>⏰ Time limit reached:</strong> You can finish your current task but cannot start new ones.';
+        
+        const taskCard = document.querySelector('.task-card');
+        const timerSection = document.querySelector('.timer-section');
+        taskCard.insertBefore(notice, timerSection.nextSibling);
+    }
+}
+
+// Override the complete task form submission to reload page to show survey button
+document.addEventListener('DOMContentLoaded', function() {
+    const completeTaskForms = document.querySelectorAll('form[action="/complete-task"]');
+    completeTaskForms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            // If timer is finished, we'll reload the page to show the survey button
+            if (timerFinished) {
+                // Let the form submit naturally and the page will reload
+            }
+        });
+    });
+});
+
+function startTimer() {
+    updateTimerDisplay();
+    
+    timerInterval = setInterval(() => {
+        remainingTime -= 1;
+        updateTimerDisplay();
+        
+        if (remainingTime <= 0) {
+            clearInterval(timerInterval);
+        }
+    }, 1000);
+}
+
+// Event listeners for modal buttons
+document.getElementById('btn-continue-survey').addEventListener('click', function() {
+    window.location.href = '/ux-questionnaire';
+});
+
+document.getElementById('btn-finish-task').addEventListener('click', function() {
+    document.getElementById('timer-modal').style.display = 'none';
+    timerFinished = true;
+    disableNewTasks();
+});
+
+// Close modal when clicking outside of it
+window.addEventListener('click', function(event) {
+    const modal = document.getElementById('timer-modal');
+    if (event.target === modal) {
+        modal.style.display = 'none';
+        timerFinished = true;
+        disableNewTasks();
+    }
+});
+
+// Start the timer when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    if (timerFinished) {
+        disableNewTasks();
+    }
+    startTimer();
+});
+</script>
 {% endblock %}

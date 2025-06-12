@@ -1,5 +1,12 @@
-# Environment variables
+# Environment variables and secrets
 .env
+.env.local
+.env.production
+*.token
+*.key
+
+# Cloned study repositories (development)
+study-*/
 
 # Python
 __pycache__/
