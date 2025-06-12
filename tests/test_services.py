@@ -142,13 +142,22 @@ class TestServicesRepositoryManagement:
         """Test committing code changes."""
         mock_repository_manager.commit_code_changes.return_value = True
         
+        # Test synchronous mode
         result = services.commit_code_changes(
-            'participant', 1, 'Test commit', True, 'token', 'org'
+            'participant', 1, 'Test commit', True, 'token', 'org', async_mode=False
         )
         assert result is True
         mock_repository_manager.commit_code_changes.assert_called_once_with(
             'participant', 1, 'Test commit', True, 'token', 'org'
         )
+    
+    def test_commit_code_changes_async(self):
+        """Test committing code changes in async mode."""
+        # Test async mode - should return True immediately
+        result = services.commit_code_changes(
+            'participant', 1, 'Test commit', True, 'token', 'org', async_mode=True
+        )
+        assert result is True  # Returns immediately in async mode
 
 
 class TestServicesLogging:
@@ -169,27 +178,46 @@ class TestServicesLogging:
         """Test logging route visit."""
         mock_study_logger.log_route_visit.return_value = True
         
+        # Test synchronous mode
         result = services.log_route_visit(
             'participant', 'home', True, 1, 
-            {'first_visit': True}, 'token', 'org'
+            {'first_visit': True}, 'token', 'org', async_mode=False
         )
         assert result is True
         mock_study_logger.log_route_visit.assert_called_once_with(
             'participant', 'home', True, 1, {'first_visit': True}, 'token', 'org'
         )
     
+    def test_log_route_visit_async(self):
+        """Test logging route visit in async mode."""
+        # Test async mode - should return True immediately
+        result = services.log_route_visit(
+            'participant', 'home', True, 1, 
+            {'first_visit': True}, 'token', 'org', async_mode=True
+        )
+        assert result is True  # Returns immediately in async mode
+    
     @patch('services._study_logger')
     def test_mark_stage_transition(self, mock_study_logger):
         """Test marking stage transition."""
         mock_study_logger.mark_stage_transition.return_value = True
         
+        # Test synchronous mode
         result = services.mark_stage_transition(
-            'participant', 1, 2, True, 'token', 'org'
+            'participant', 1, 2, True, 'token', 'org', async_mode=False
         )
         assert result is True
         mock_study_logger.mark_stage_transition.assert_called_once_with(
             'participant', 1, 2, True, 'token', 'org'
         )
+    
+    def test_mark_stage_transition_async(self):
+        """Test marking stage transition in async mode."""
+        # Test async mode - should return True immediately
+        result = services.mark_stage_transition(
+            'participant', 1, 2, True, 'token', 'org', async_mode=True
+        )
+        assert result is True  # Returns immediately in async mode
 
 
 class TestServicesSessionTracking:

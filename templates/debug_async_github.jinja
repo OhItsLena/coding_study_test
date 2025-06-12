@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Async GitHub Service Debug</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .stats { background: #e7f3ff; }
+        .queue { background: #fff3e0; }
+        .config { background: #f0f8e7; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f2f2f2; }
+        .status-good { color: #28a745; }
+        .status-warning { color: #ffc107; }
+        .status-error { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>⚡ Async GitHub Service Debug</h1>
+    <p><strong>Current Time:</strong> {{ current_time }}</p>
+    <p><strong>Async Mode:</strong> {% if async_mode %}✅ Enabled{% else %}❌ Disabled{% endif %}</p>
+    
+    <div class="section config">
+        <h3>🔧 Configuration</h3>
+        <table>
+            <tr><th>Setting</th><th>Value</th></tr>
+            <tr><td>ASYNC_GITHUB_MODE</td><td>{% if async_mode %}Enabled{% else %}Disabled{% endif %}</td></tr>
+            <tr><td>DEVELOPMENT_MODE</td><td>{% if development_mode %}Enabled{% else %}Disabled{% endif %}</td></tr>
+            <tr><td>GITHUB_TOKEN</td><td>{% if github_token %}Set{% else %}Not set{% endif %}</td></tr>
+            <tr><td>GITHUB_ORG</td><td>{{ github_org }}</td></tr>
+        </table>
+    </div>
+    
+    <div class="section stats">
+        <h3>📊 Operation Statistics</h3>
+        <table>
+            <tr><th>Metric</th><th>Value</th></tr>
+            <tr><td>Total Operations</td><td>{{ stats.total_operations or 0 }}</td></tr>
+            <tr><td>Successful Operations</td><td class="status-good">{{ stats.successful_operations or 0 }}</td></tr>
+            <tr><td>Failed Operations</td><td class="{% if stats.failed_operations and stats.failed_operations > 0 %}status-error{% else %}status-good{% endif %}">{{ stats.failed_operations or 0 }}</td></tr>
+            <tr><td>Permanently Failed</td><td class="{% if stats.failed_operations_count and stats.failed_operations_count > 0 %}status-error{% else %}status-good{% endif %}">{{ stats.failed_operations_count or 0 }}</td></tr>
+            <tr><td>Worker Thread Status</td><td class="{% if stats.worker_alive %}status-good{% else %}status-error{% endif %}">{% if stats.worker_alive %}Running{% else %}Stopped{% endif %}</td></tr>
+        </table>
+    </div>
+    
+    <div class="section queue">
+        <h3>📋 Current Queue Status</h3>
+        <table>
+            <tr><th>Property</th><th>Value</th></tr>
+            <tr><td>Queue Size</td><td class="{% if queue_size > 10 %}status-warning{% elif queue_size < 5 %}status-good{% endif %}">{{ queue_size }}</td></tr>
+            <tr><td>Queue Status</td><td class="{% if queue_size > 10 %}status-warning{% else %}status-good{% endif %}">{% if queue_size > 10 %}Busy{% elif queue_size < 5 %}Normal{% else %}Active{% endif %}</td></tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h3>🔧 Quick Actions</h3>
+        <p><a href="/debug-session">← Back to Session Debug</a></p>
+        <p><a href="/debug-async-github">🔄 Refresh Stats</a></p>
+        <p><a href="/">🏠 Go to Home</a></p>
+    </div>
+    
+    <script>
+        // Auto-refresh every 3 seconds for more frequent updates
+        setTimeout(() => {
+            window.location.reload();
+        }, 3000);
+    </script>
+</body>
+</html>

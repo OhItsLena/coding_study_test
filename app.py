@@ -7,7 +7,8 @@ from services import (
     get_coding_condition, get_study_stage, get_participant_id, open_vscode_with_repository,
     check_and_clone_repository, commit_code_changes, test_github_connectivity,
     setup_repository_for_stage, log_route_visit, should_log_route, mark_route_as_logged,
-    mark_stage_transition
+    mark_stage_transition, get_async_github_stats, get_async_github_queue_size,
+    test_github_connectivity_async, stop_async_github_service, wait_for_async_github_completion
 )
 
 # Load environment variables from .env file
@@ -24,6 +25,9 @@ DEV_STAGE = int(os.getenv('DEV_STAGE', '1'))
 # GitHub authentication configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
 GITHUB_ORG = os.getenv('GITHUB_ORG', 'LMU-Vibe-Coding-Study')
+
+# Async GitHub configuration
+ASYNC_GITHUB_MODE = os.getenv('ASYNC_GITHUB_MODE', 'true').lower() == 'true'
 
 # Load task requirements at startup
 TASK_REQUIREMENTS = load_task_requirements()
@@ -42,7 +46,8 @@ def home():
             study_stage=study_stage,
             session_data={'first_home_visit': True},
             github_token=GITHUB_TOKEN,
-            github_org=GITHUB_ORG
+            github_org=GITHUB_ORG,
+            async_mode=ASYNC_GITHUB_MODE
         )
         mark_route_as_logged(session, 'home', study_stage)
     
@@ -89,152 +94,33 @@ def debug_session():
         else:
             timer_info[stage] = {'status': 'Not started'}
     
-    # Build HTML response
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Development Session Debug</title>
-        <style>
-            body {{ font-family: monospace; margin: 20px; }}
-            .section {{ margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }}
-            .stage {{ background: #f8f9fa; }}
-            .timer {{ background: #fff3cd; }}
-            .session {{ background: #d4edda; }}
-            .actions {{ background: #cce7ff; }}
-            table {{ border-collapse: collapse; width: 100%; margin: 10px 0; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-            th {{ background: #f2f2f2; }}
-            .btn {{ padding: 8px 16px; margin: 5px; text-decoration: none; border-radius: 3px; display: inline-block; }}
-            .btn-danger {{ background: #dc3545; color: white; }}
-            .btn-primary {{ background: #007bff; color: white; }}
-            .btn-success {{ background: #28a745; color: white; }}
-        </style>
-    </head>
-    <body>
-        <h1>🐛 Development Session Debug</h1>
-        <p><strong>Current Time:</strong> {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
-        <p><strong>Participant ID:</strong> {participant_id}</p>
-        <p><strong>Current Study Stage:</strong> {study_stage}</p>
-        <p><strong>Development Mode:</strong> {DEVELOPMENT_MODE}</p>
-        
-        <div class="section actions">
-            <h3>🔧 Quick Actions</h3>
-            <a href="/clear-session" class="btn btn-danger">Clear All Session Data</a>
-            <a href="/task" class="btn btn-primary">Go to Task Page</a>
-            <a href="/" class="btn btn-success">Go to Home</a>
-            <a href="/debug-session" class="btn btn-primary">Refresh Debug</a>
-        </div>
-        
-        <div class="section session">
-            <h3>📋 Raw Session Data</h3>
-            <table>
-                <tr><th>Key</th><th>Value</th></tr>
-    """
-    
-    # Add raw session data
-    for key, value in session.items():
-        html += f"<tr><td>{key}</td><td>{value}</td></tr>"
-    
-    html += """
-            </table>
-        </div>
-    """
-    
-    # Add stage-specific data
-    for stage in [1, 2]:
-        data = stage1_data if stage == 1 else stage2_data
-        timer = timer_info[stage]
-        
-        html += f"""
-        <div class="section stage">
-            <h3>🎯 Stage {stage} Data</h3>
-            <table>
-                <tr><th>Property</th><th>Value</th></tr>
-                <tr><td>Current Task</td><td>{data['current_task']}</td></tr>
-                <tr><td>Completed Tasks</td><td>{data['completed_tasks']} (Count: {len(data['completed_tasks'])})</td></tr>
-                <tr><td>Timer Finished</td><td>{data['timer_finished']}</td></tr>
-                <tr><td>Timer Start</td><td>{data['timer_start']}</td></tr>
-            </table>
-        </div>
-        
-        <div class="section timer">
-            <h3>⏰ Stage {stage} Timer Info</h3>
-            <table>
-                <tr><th>Property</th><th>Value</th></tr>
-        """
-        
-        if 'status' in timer:
-            html += f"<tr><td>Status</td><td>{timer['status']}</td></tr>"
-        else:
-            html += f"""
-                <tr><td>Start Time</td><td>{timer['timer_start_readable']}</td></tr>
-                <tr><td>Start Timestamp</td><td>{timer['timer_start_timestamp']}</td></tr>
-                <tr><td>Elapsed Time</td><td>{timer['elapsed_seconds']:.1f} seconds ({timer['elapsed_minutes']:.1f} minutes)</td></tr>
-                <tr><td>Remaining Time</td><td>{timer['remaining_seconds']:.1f} seconds ({timer['remaining_minutes']:.1f} minutes)</td></tr>
-                <tr><td>Timer Status</td><td>{'⚠️ EXPIRED' if timer['remaining_seconds'] <= 0 else '✅ Running'}</td></tr>
-            """
-        
-        html += """
-            </table>
-        </div>
-        """
-    
-    # Add task requirements info
+    # Prepare data for template
     task_requirements = get_tasks_for_stage(study_stage, TASK_REQUIREMENTS)
-    html += f"""
-        <div class="section">
-            <h3>📝 Task Requirements (Stage {study_stage})</h3>
-            <p><strong>Total Tasks:</strong> {len(task_requirements)}</p>
-            <table>
-                <tr><th>Task ID</th><th>Title</th><th>Status</th></tr>
-    """
-    
     current_task = stage1_data['current_task'] if study_stage == 1 else stage2_data['current_task']
     completed_tasks = stage1_data['completed_tasks'] if study_stage == 1 else stage2_data['completed_tasks']
     
-    for req in task_requirements:
-        if req['id'] in completed_tasks:
-            status = "✅ Completed"
-        elif req['id'] == current_task:
-            status = "🔄 Current"
-        elif req['id'] < current_task:
-            status = "❓ Skipped"
-        else:
-            status = "🔒 Locked"
-        
-        html += f"<tr><td>{req['id']}</td><td>{req['title']}</td><td>{status}</td></tr>"
-    
-    html += """
-            </table>
-        </div>
-        
-        <div class="section">
-            <h3>🔍 VS Code Status</h3>
-            <table>
-                <tr><th>Stage</th><th>VS Code Opened</th></tr>
-    """
-    
+    # Prepare VS Code status
+    vscode_status = {}
     for stage in [1, 2]:
         vscode_key = f'vscode_opened_stage{stage}'
-        vscode_status = "✅ Yes" if session.get(vscode_key, False) else "❌ No"
-        html += f"<tr><td>Stage {stage}</td><td>{vscode_status}</td></tr>"
+        vscode_status[stage] = session.get(vscode_key, False)
     
-    html += """
-            </table>
-        </div>
-        
-        <script>
-            // Auto-refresh every 5 seconds
-            setTimeout(() => {
-                window.location.reload();
-            }, 5000);
-        </script>
-    </body>
-    </html>
-    """
+    # Prepare session items for template
+    session_items = list(session.items())
     
-    return html
+    return render_template('debug_session.jinja',
+                         current_time=time.strftime('%Y-%m-%d %H:%M:%S'),
+                         participant_id=participant_id,
+                         study_stage=study_stage,
+                         development_mode=DEVELOPMENT_MODE,
+                         stage1_data=stage1_data,
+                         stage2_data=stage2_data,
+                         timer_info=timer_info,
+                         task_requirements=task_requirements,
+                         current_task=current_task,
+                         completed_tasks=completed_tasks,
+                         vscode_status=vscode_status,
+                         session_items=session_items)
 
 @app.route('/background-questionnaire')
 def background_questionnaire():
@@ -427,7 +313,8 @@ def task():
             study_stage=study_stage,
             session_data=log_session_data,
             github_token=GITHUB_TOKEN,
-            github_org=GITHUB_ORG
+            github_org=GITHUB_ORG,
+            async_mode=ASYNC_GITHUB_MODE
         )
         mark_route_as_logged(session, 'task', study_stage)
     
@@ -438,10 +325,10 @@ def task():
         
         # Make an initial commit to mark the start of this coding session
         commit_message = f"Started coding session - Condition: {coding_condition}"
-        commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
+        commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, async_mode=ASYNC_GITHUB_MODE)
         
         if commit_success:
-            print(f"Initial commit made for session start - participant {participant_id}, stage {study_stage}")
+            print(f"Initial commit {'queued' if ASYNC_GITHUB_MODE else 'made'} for session start - participant {participant_id}, stage {study_stage}")
         else:
             print(f"No initial commit needed or failed for participant {participant_id}, stage {study_stage}")
     
@@ -547,12 +434,13 @@ def complete_task():
             study_stage=study_stage,
             session_data=log_session_data,
             github_token=GITHUB_TOKEN,
-            github_org=GITHUB_ORG
+            github_org=GITHUB_ORG,
+            async_mode=ASYNC_GITHUB_MODE
         )
         
         # Commit code changes when task is completed
         commit_message = f"Completed task {task_id}: {task_title}"
-        commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
+        commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, async_mode=ASYNC_GITHUB_MODE)
         
         if commit_success:
             print(f"Code changes committed for task {task_id}")
@@ -633,6 +521,24 @@ def get_timer_status():
         'timer_finished': timer_finished
     })
 
+@app.route('/debug-async-github')
+def debug_async_github():
+    """Debug route to display async GitHub service statistics during development"""
+    if not DEVELOPMENT_MODE:
+        return "Only available in development mode", 403
+    
+    stats = get_async_github_stats()
+    queue_size = get_async_github_queue_size()
+    
+    return render_template('debug_async_github.jinja',
+                         current_time=time.strftime('%Y-%m-%d %H:%M:%S'),
+                         async_mode=ASYNC_GITHUB_MODE,
+                         development_mode=DEVELOPMENT_MODE,
+                         github_token=GITHUB_TOKEN,
+                         github_org=GITHUB_ORG,
+                         stats=stats,
+                         queue_size=queue_size)
+
 if __name__ == '__main__':
     # Print mode information
     if DEVELOPMENT_MODE:
@@ -652,17 +558,29 @@ if __name__ == '__main__':
     
     # Test GitHub connectivity
     print("\nTesting GitHub connectivity...")
+    print(f"Async GitHub mode: {'Enabled' if ASYNC_GITHUB_MODE else 'Disabled'}")
     if GITHUB_TOKEN:
         print(f"GitHub authentication enabled for organization: {GITHUB_ORG}")
     else:
         print("No GitHub token provided - using public access only")
     
-    github_available = test_github_connectivity(participant_id, GITHUB_TOKEN, GITHUB_ORG)
-    if not github_available:
-        print("Warning: GitHub repository may not be accessible")
+    if ASYNC_GITHUB_MODE:
+        # Test connectivity asynchronously
+        test_github_connectivity_async(participant_id, GITHUB_TOKEN, GITHUB_ORG)
+        print("GitHub connectivity test queued for background processing")
+    else:
+        # Test connectivity synchronously
+        github_available = test_github_connectivity(participant_id, GITHUB_TOKEN, GITHUB_ORG)
+        if not github_available:
+            print("Warning: GitHub repository may not be accessible")
     
     # Check and clone repository if needed
     print("\nChecking repository...")
     check_and_clone_repository(participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     
+    # Set up graceful shutdown for async service
+    import atexit
+    atexit.register(stop_async_github_service)
+    print("Async GitHub service shutdown handler registered")
+
     app.run(host='127.0.0.1', port=8085, debug=True)
