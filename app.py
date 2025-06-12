@@ -2,7 +2,7 @@ import os
 import time
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from dotenv import load_dotenv
-from helpers import (
+from services import (
     load_task_requirements, get_tasks_for_stage, get_session_data, update_session_data,
     get_coding_condition, get_study_stage, get_participant_id, open_vscode_with_repository,
     check_and_clone_repository, commit_code_changes, test_github_connectivity,

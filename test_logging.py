@@ -9,10 +9,10 @@ import tempfile
 import shutil
 from datetime import datetime
 
-# Add the current directory to Python path so we can import helpers
+# Add the current directory to Python path so we can import services
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from helpers import (
+from services import (
     get_logs_directory_path, 
     ensure_logging_repository, 
     log_route_visit,
@@ -99,7 +99,7 @@ def test_logging_functionality():
     
     # Test 5: Check log file contents
     print("📄 Test 5: Checking log file contents")
-    log_file_path = os.path.join(logs_path, 'route_visits.json')
+    log_file_path = os.path.join(logs_path, 'session_log.json')
     if os.path.exists(log_file_path):
         print("✅ Log file exists")
         try:

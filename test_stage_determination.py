@@ -8,10 +8,10 @@ import os
 import sys
 from unittest.mock import patch, MagicMock
 
-# Add the current directory to the path to import helpers
+# Add the current directory to the path to import services
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from helpers import get_study_stage
+from services import get_study_stage
 
 
 def test_development_mode():
@@ -54,7 +54,7 @@ def test_azure_vm_tags():
     
     # Test 1: Tag returns study_stage=1
     print("\n1. Testing: Azure VM tag study_stage=1")
-    with patch('helpers.requests.get') as mock_get:
+    with patch('services.requests.get') as mock_get:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "participant_id:test-participant;study_stage:1;environment:production"
@@ -66,7 +66,7 @@ def test_azure_vm_tags():
     
     # Test 2: Tag returns study_stage=2
     print("\n2. Testing: Azure VM tag study_stage=2")
-    with patch('helpers.requests.get') as mock_get:
+    with patch('services.requests.get') as mock_get:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "participant_id:test-participant;study_stage:2;environment:production"
@@ -78,7 +78,7 @@ def test_azure_vm_tags():
     
     # Test 3: Tag with invalid study_stage value (should default to 1)
     print("\n3. Testing: Invalid study_stage tag value")
-    with patch('helpers.requests.get') as mock_get:
+    with patch('services.requests.get') as mock_get:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "participant_id:test-participant;study_stage:invalid;environment:production"
@@ -90,7 +90,7 @@ def test_azure_vm_tags():
     
     # Test 4: No study_stage tag (should default to 1)
     print("\n4. Testing: Missing study_stage tag")
-    with patch('helpers.requests.get') as mock_get:
+    with patch('services.requests.get') as mock_get:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "participant_id:test-participant;environment:production"
@@ -102,7 +102,7 @@ def test_azure_vm_tags():
     
     # Test 5: Azure metadata service error (should default to 1)
     print("\n5. Testing: Azure metadata service error")
-    with patch('helpers.requests.get') as mock_get:
+    with patch('services.requests.get') as mock_get:
         mock_get.side_effect = Exception("Connection error")
         
         stage = get_study_stage(participant_id, development_mode=False)
@@ -111,7 +111,7 @@ def test_azure_vm_tags():
     
     # Test 6: Azure metadata service returns non-200 status (should default to 1)
     print("\n6. Testing: Azure metadata service non-200 status")
-    with patch('helpers.requests.get') as mock_get:
+    with patch('services.requests.get') as mock_get:
         mock_response = MagicMock()
         mock_response.status_code = 404
         mock_get.return_value = mock_response
