@@ -7,6 +7,7 @@
 
 # Cloned study repositories (development)
 study-*/
+logs-*/
 
 # Python
 __pycache__/

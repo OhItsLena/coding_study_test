@@ -54,10 +54,12 @@ For local development and testing, you can enable development mode by setting en
    ```
    DEVELOPMENT_MODE=true
    DEV_PARTICIPANT_ID=dev-participant-001
+   DEV_STAGE=1
    ```
 
 2. **In development mode, the application will:**
    - Use a mocked participant ID instead of querying Azure metadata
+   - Use a mocked study stage instead of querying Azure VM tags
    - Clone repositories to the current project directory instead of `~/workspace/`
    - Display clear indicators that development mode is active
 
@@ -69,6 +71,7 @@ For local development and testing, you can enable development mode by setting en
    # Option 2: Set environment variables manually and run
    export DEVELOPMENT_MODE=true
    export DEV_PARTICIPANT_ID=dev-participant-001
+   export DEV_STAGE=1
    python app.py
    ```
    You'll see development mode indicators in the console output.

@@ -5,7 +5,9 @@ from dotenv import load_dotenv
 from helpers import (
     load_task_requirements, get_tasks_for_stage, get_session_data, update_session_data,
     get_coding_condition, get_study_stage, get_participant_id, open_vscode_with_repository,
-    check_and_clone_repository, commit_code_changes, test_github_connectivity
+    check_and_clone_repository, commit_code_changes, test_github_connectivity,
+    setup_repository_for_stage, log_route_visit, should_log_route, mark_route_as_logged,
+    mark_stage_transition
 )
 
 # Load environment variables from .env file
@@ -17,6 +19,7 @@ app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 # Development mode configuration
 DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'false').lower() == 'true'
 DEV_PARTICIPANT_ID = os.getenv('DEV_PARTICIPANT_ID', 'dev-participant-001')
+DEV_STAGE = int(os.getenv('DEV_STAGE', '1'))
 
 # GitHub authentication configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
@@ -28,7 +31,20 @@ TASK_REQUIREMENTS = load_task_requirements()
 @app.route('/')
 def home():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Log route visit if this is the first time
+    if should_log_route(session, 'home', study_stage):
+        log_route_visit(
+            participant_id=participant_id,
+            route_name='home',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data={'first_home_visit': True},
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG
+        )
+        mark_route_as_logged(session, 'home', study_stage)
     
     # Stage 2 participants should go directly to welcome back screen
     if study_stage == 2:
@@ -50,7 +66,7 @@ def debug_session():
         return "Only available in development mode", 403
     
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     
     # Get session data for both stages
     stage1_data = get_session_data(session, 1)
@@ -223,7 +239,20 @@ def debug_session():
 @app.route('/background-questionnaire')
 def background_questionnaire():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Log route visit if this is the first time
+    if should_log_route(session, 'background_questionnaire', study_stage):
+        log_route_visit(
+            participant_id=participant_id,
+            route_name='background_questionnaire',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data={'first_background_questionnaire_visit': True},
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG
+        )
+        mark_route_as_logged(session, 'background_questionnaire', study_stage)
     
     # Stage 2 participants should skip the background questionnaire
     if study_stage == 2:
@@ -244,7 +273,26 @@ def background_questionnaire():
 @app.route('/ux-questionnaire')
 def ux_questionnaire():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Log route visit if this is the first time
+    if should_log_route(session, 'ux_questionnaire', study_stage):
+        # Include session data for context about study completion
+        session_data = get_session_data(session, study_stage)
+        session_data['study_completion'] = True
+        session_data['ux_questionnaire_accessed'] = True
+        
+        log_route_visit(
+            participant_id=participant_id,
+            route_name='ux_questionnaire',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data=session_data,
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG
+        )
+        mark_route_as_logged(session, 'ux_questionnaire', study_stage)
+    
     ux_survey_url = os.getenv('UX_SURVEY_URL', '#')
     
     # Commit any remaining code changes before leaving for the survey
@@ -269,7 +317,26 @@ def ux_questionnaire():
 @app.route('/tutorial')
 def tutorial():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Log route visit if this is the first time
+    if should_log_route(session, 'tutorial', study_stage):
+        coding_condition = get_coding_condition(participant_id)
+        session_data = {
+            'tutorial_accessed': True,
+            'coding_condition': coding_condition
+        }
+        
+        log_route_visit(
+            participant_id=participant_id,
+            route_name='tutorial',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data=session_data,
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG
+        )
+        mark_route_as_logged(session, 'tutorial', study_stage)
     
     # Stage 2 participants should skip the tutorial
     if study_stage == 2:
@@ -284,8 +351,37 @@ def tutorial():
 @app.route('/welcome-back')
 def welcome_back():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     coding_condition = get_coding_condition(participant_id)
+    
+    # Log route visit if this is the first time
+    if should_log_route(session, 'welcome_back', study_stage):
+        session_data = {
+            'stage_transition': f'stage_1_to_stage_2',
+            'coding_condition': coding_condition,
+            'returning_participant': True
+        }
+        
+        log_route_visit(
+            participant_id=participant_id,
+            route_name='welcome_back',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data=session_data,
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG
+        )
+        mark_route_as_logged(session, 'welcome_back', study_stage)
+        
+        # Mark explicit stage transition from 1 to 2
+        mark_stage_transition(
+            participant_id=participant_id,
+            from_stage=1,
+            to_stage=2,
+            development_mode=DEVELOPMENT_MODE,
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG
+        )
     
     # Redirect to home if this is actually stage 1
     if study_stage == 1:
@@ -299,8 +395,13 @@ def welcome_back():
 @app.route('/task')
 def task():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     coding_condition = get_coding_condition(participant_id)
+    
+    # Set up repository for the current stage (ensure correct branch)
+    setup_success = setup_repository_for_stage(participant_id, study_stage, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
+    if not setup_success:
+        print(f"Warning: Failed to set up repository for stage {study_stage}")
     
     # Get stage-specific session data
     session_data = get_session_data(session, study_stage)
@@ -309,13 +410,33 @@ def task():
     timer_start = session_data['timer_start']
     timer_finished = session_data['timer_finished']
     
+    # Log route visit if this is the first time (important transition to coding phase)
+    if should_log_route(session, 'task', study_stage):
+        log_session_data = {
+            'coding_session_start': True,
+            'coding_condition': coding_condition,
+            'timer_start': timer_start,
+            'current_task': current_task,
+            'completed_tasks': completed_tasks
+        }
+        
+        log_route_visit(
+            participant_id=participant_id,
+            route_name='task',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data=log_session_data,
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG
+        )
+        mark_route_as_logged(session, 'task', study_stage)
+    
     # Initialize timer if not started yet
     if timer_start is None:
         timer_start = time.time()
         update_session_data(session, study_stage, timer_start=timer_start)
         
         # Make an initial commit to mark the start of this coding session
-        coding_condition = get_coding_condition(participant_id)
         commit_message = f"Started coding session - Condition: {coding_condition}"
         commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
         
@@ -341,7 +462,7 @@ def task():
         session[vscode_opened_key] = True
         
         # Try to open VS Code with the repository
-        vscode_success = open_vscode_with_repository(participant_id, DEVELOPMENT_MODE)
+        vscode_success = open_vscode_with_repository(participant_id, DEVELOPMENT_MODE, study_stage)
         if vscode_success:
             print(f"VS Code opened successfully for participant {participant_id}, stage {study_stage}")
         else:
@@ -368,9 +489,10 @@ def task():
 @app.route('/open-vscode')
 def open_vscode():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     
     # Try to open VS Code with the repository
-    vscode_success = open_vscode_with_repository(participant_id, DEVELOPMENT_MODE)
+    vscode_success = open_vscode_with_repository(participant_id, DEVELOPMENT_MODE, study_stage)
     
     if vscode_success:
         print(f"VS Code opened successfully for participant {participant_id} (manual request)")
@@ -383,7 +505,7 @@ def open_vscode():
 @app.route('/complete-task', methods=['POST'])
 def complete_task():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     task_id = int(request.form.get('task_id', 1))
     
     # Get stage-specific session data
@@ -404,11 +526,31 @@ def complete_task():
         update_session_data(session, study_stage, completed_tasks=completed_tasks)
         print(f"Task {task_id} marked as completed for stage {study_stage}")
         
-        # Commit code changes when task is completed
+        # Log task completion event
         task_title = "Unknown Task"
         if task_id <= len(task_requirements):
             task_title = task_requirements[task_id - 1].get('title', f'Task {task_id}')
         
+        log_session_data = {
+            'event_type': 'task_completion',
+            'task_id': task_id,
+            'task_title': task_title,
+            'completed_tasks': completed_tasks,
+            'timer_finished': timer_finished
+        }
+        
+        # Log this as a special event (not route-based)
+        log_route_visit(
+            participant_id=participant_id,
+            route_name=f'task_completion_{task_id}',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data=log_session_data,
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG
+        )
+        
+        # Commit code changes when task is completed
         commit_message = f"Completed task {task_id}: {task_title}"
         commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
         
@@ -431,10 +573,29 @@ def complete_task():
 def timer_expired():
     """Handle when the 40-minute timer expires"""
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     
     # Mark timer as finished
     update_session_data(session, study_stage, timer_finished=True)
+    
+    # Log timer expiration event
+    session_data = get_session_data(session, study_stage)
+    log_session_data = {
+        'event_type': 'timer_expired',
+        'timer_duration_minutes': 40,
+        'completed_tasks': session_data['completed_tasks'],
+        'current_task': session_data['current_task']
+    }
+    
+    log_route_visit(
+        participant_id=participant_id,
+        route_name='timer_expired',
+        development_mode=DEVELOPMENT_MODE,
+        study_stage=study_stage,
+        session_data=log_session_data,
+        github_token=GITHUB_TOKEN,
+        github_org=GITHUB_ORG
+    )
     
     # Commit any code changes when timer expires
     commit_message = "Timer expired - 40 minutes completed"
@@ -451,7 +612,7 @@ def timer_expired():
 def get_timer_status():
     """Get current timer status"""
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     
     session_data = get_session_data(session, study_stage)
     timer_start = session_data['timer_start']
@@ -485,7 +646,7 @@ if __name__ == '__main__':
     
     # Get participant ID and check/clone repository on startup
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     print(f"Starting server for participant: {participant_id}")
     print(f"Study stage: {study_stage} ({'Repository not found' if study_stage == 1 else 'Repository exists'})")
     
