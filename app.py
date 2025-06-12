@@ -1,12 +1,12 @@
 import os
-import shutil
-import subprocess
-import requests
-import json
 import time
-from datetime import datetime
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from dotenv import load_dotenv
+from helpers import (
+    load_task_requirements, get_tasks_for_stage, get_session_data, update_session_data,
+    get_coding_condition, get_study_stage, get_participant_id, open_vscode_with_repository,
+    check_and_clone_repository, commit_code_changes, test_github_connectivity
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -22,538 +22,13 @@ DEV_PARTICIPANT_ID = os.getenv('DEV_PARTICIPANT_ID', 'dev-participant-001')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
 GITHUB_ORG = os.getenv('GITHUB_ORG', 'LMU-Vibe-Coding-Study')
 
-def load_task_requirements():
-    """
-    Load task requirements from the JSON file.
-    Returns a dictionary with stage1_tasks and stage2_tasks.
-    """
-    try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        json_path = os.path.join(current_dir, 'task_requirements.json')
-        
-        with open(json_path, 'r', encoding='utf-8') as file:
-            data = json.load(file)
-            return data
-    except Exception as e:
-        print(f"Error loading task requirements: {str(e)}")
-        return {"stage1_tasks": [], "stage2_tasks": []}
-
 # Load task requirements at startup
 TASK_REQUIREMENTS = load_task_requirements()
 
-def get_tasks_for_stage(study_stage):
-    """
-    Get the appropriate tasks based on the study stage.
-    Returns the list of tasks for the given stage.
-    """
-    if study_stage == 1:
-        return TASK_REQUIREMENTS.get('stage1_tasks', [])
-    elif study_stage == 2:
-        return TASK_REQUIREMENTS.get('stage2_tasks', [])
-    else:
-        return TASK_REQUIREMENTS.get('stage1_tasks', [])  # Default to stage 1
-
-def get_session_data(study_stage):
-    """
-    Get session data specific to the current study stage.
-    Returns a dictionary with current_task and completed_tasks for the stage.
-    """
-    stage_key = f'stage{study_stage}'
-    return {
-        'current_task': session.get(f'current_task_{stage_key}', 1),
-        'completed_tasks': session.get(f'completed_tasks_{stage_key}', []),
-        'stage_key': stage_key,
-        'timer_start': session.get(f'timer_start_{stage_key}'),
-        'timer_finished': session.get(f'timer_finished_{stage_key}', False)
-    }
-
-def update_session_data(study_stage, current_task=None, completed_tasks=None, timer_start=None, timer_finished=None):
-    """
-    Update session data specific to the current study stage.
-    """
-    stage_key = f'stage{study_stage}'
-    
-    if current_task is not None:
-        session[f'current_task_{stage_key}'] = current_task
-    
-    if completed_tasks is not None:
-        session[f'completed_tasks_{stage_key}'] = completed_tasks
-    
-    if timer_start is not None:
-        session[f'timer_start_{stage_key}'] = timer_start
-    
-    if timer_finished is not None:
-        session[f'timer_finished_{stage_key}'] = timer_finished
-
-def get_coding_condition(participant_id):
-    """
-    Determine the coding condition based on participant ID.
-    Returns either 'vibe' for vibe coding or 'ai-assisted' for AI-assisted coding.
-    """
-    # Simple hash-based assignment for consistent condition per participant
-    # This ensures the same participant always gets the same condition
-    if participant_id == "Study Participant":
-        return "vibe"  # Default for unknown participants
-    
-    # Use hash of participant ID to assign condition
-    import hashlib
-    hash_value = int(hashlib.md5(participant_id.encode()).hexdigest(), 16)
-    return "vibe" if hash_value % 2 == 0 else "ai-assisted"
-
-def get_study_stage(participant_id):
-    """
-    Determine if the participant is in stage 1 or stage 2 of the study.
-    Stage 1: No repository exists in the expected location yet
-    Stage 2: Repository already exists in the expected location
-    Returns either 1 or 2.
-    """
-    if DEVELOPMENT_MODE:
-        # In development mode, use current directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        workspace_path = current_dir
-        repo_name = f"study-{participant_id}"
-        repo_path = os.path.join(workspace_path, repo_name)
-    else:
-        # Use user's home directory with a workspace folder
-        home_dir = os.path.expanduser("~")
-        workspace_path = os.path.join(home_dir, "workspace")
-        repo_name = f"study-{participant_id}"
-        repo_path = os.path.join(workspace_path, repo_name)
-    
-    # Normalize paths for Windows
-    repo_path = os.path.normpath(repo_path)
-    
-    # Check if repository already exists and is a valid git repository
-    if os.path.exists(repo_path) and os.path.isdir(repo_path):
-        git_dir = os.path.join(repo_path, '.git')
-        if os.path.exists(git_dir):
-            return 2  # Stage 2: Repository exists
-    
-    return 1  # Stage 1: No repository found
-
-def get_participant_id():
-    """
-    Get the participant_id from Azure VM tags using the Instance Metadata Service.
-    In development mode, returns a mocked participant ID.
-    Returns the participant_id if found, otherwise returns a default message.
-    """
-    if DEVELOPMENT_MODE:
-        print(f"Development mode: Using mocked participant ID: {DEV_PARTICIPANT_ID}")
-        return DEV_PARTICIPANT_ID
-    
-    try:
-        # Azure Instance Metadata Service endpoint for tags
-        metadata_url = "http://169.254.169.254/metadata/instance/compute/tags?api-version=2021-02-01&format=text"
-        headers = {'Metadata': 'true'}
-        
-        # Set a short timeout since this is a local metadata service
-        response = requests.get(metadata_url, headers=headers, timeout=5)
-        
-        if response.status_code == 200:
-            tags_text = response.text
-            # Tags are returned as semicolon-separated key:value pairs
-            for tag in tags_text.split(';'):
-                if ':' in tag:
-                    key, value = tag.split(':', 1)
-                    if key.strip().lower() == 'participant_id':
-                        return value.strip()
-        
-        return "Study Participant"
-    except Exception:
-        # If we can't reach the metadata service or any other error occurs
-        return "Study Participant"
-
-def get_authenticated_repo_url(repo_name):
-    """
-    Construct the authenticated GitHub repository URL.
-    If GITHUB_TOKEN is provided, includes it in the URL for authentication.
-    Returns the URL for cloning/accessing the repository.
-    """
-    if GITHUB_TOKEN:
-        # Use token-based authentication with HTTPS
-        return f"https://{GITHUB_TOKEN}@github.com/{GITHUB_ORG}/{repo_name}.git"
-    else:
-        # Use public HTTPS URL (for public repositories only)
-        return f"https://github.com/{GITHUB_ORG}/{repo_name}.git"
-
-def open_vscode_with_repository(participant_id):
-    """
-    Open VS Code with the participant's cloned repository.
-    Returns True if successful, False otherwise.
-    """
-    # Get the repository path
-    if DEVELOPMENT_MODE:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        workspace_path = current_dir
-        repo_name = f"study-{participant_id}"
-        repo_path = os.path.join(workspace_path, repo_name)
-    else:
-        home_dir = os.path.expanduser("~")
-        workspace_path = os.path.join(home_dir, "workspace")
-        repo_name = f"study-{participant_id}"
-        repo_path = os.path.join(workspace_path, repo_name)
-    
-    # Normalize path
-    repo_path = os.path.normpath(repo_path)
-    
-    try:
-        # Check if repository exists
-        if not os.path.exists(repo_path):
-            print(f"Repository does not exist at: {repo_path}")
-            return False
-        
-        # Try to open VS Code with the repository
-        print(f"Opening VS Code with repository: {repo_path}")
-        
-        # Use 'code' command to open VS Code with the repository folder
-        result = subprocess.run([
-            'code', repo_path
-        ], capture_output=True, text=True, timeout=10)
-        
-        if result.returncode == 0:
-            print(f"Successfully opened VS Code with repository: {repo_path}")
-            return True
-        else:
-            print(f"Failed to open VS Code. Error: {result.stderr}")
-            # Try alternative method for macOS
-            try:
-                result = subprocess.run([
-                    'open', '-a', 'Visual Studio Code', repo_path
-                ], capture_output=True, text=True, timeout=10)
-                
-                if result.returncode == 0:
-                    print(f"Successfully opened VS Code using 'open' command: {repo_path}")
-                    return True
-                else:
-                    print(f"Failed to open VS Code with 'open' command. Error: {result.stderr}")
-                    return False
-            except Exception as e:
-                print(f"Error trying 'open' command: {str(e)}")
-                return False
-            
-    except subprocess.TimeoutExpired:
-        print("VS Code open operation timed out")
-        return False
-    except FileNotFoundError:
-        print("VS Code ('code' command) not found in PATH. Please ensure VS Code is installed and the 'code' command is available.")
-        return False
-    except Exception as e:
-        print(f"Error opening VS Code: {str(e)}")
-        return False
-
-def check_and_clone_repository(participant_id):
-    """
-    Check if the GitHub repository for the participant exists in the workspace directory.
-    If not, clone it to that location.
-    In development mode, clones to the current project directory.
-    """
-    if DEVELOPMENT_MODE:
-        # In development mode, use current directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        workspace_path = current_dir
-        repo_name = f"study-{participant_id}"
-        repo_path = os.path.join(workspace_path, repo_name)
-        print(f"Development mode: Using local directory for repository: {repo_path}")
-    else:
-        # Use user's home directory with a workspace folder
-        home_dir = os.path.expanduser("~")
-        workspace_path = os.path.join(home_dir, "workspace")
-        repo_name = f"study-{participant_id}"
-        repo_path = os.path.join(workspace_path, repo_name)
-    
-    # Get authenticated repository URL
-    repo_url = get_authenticated_repo_url(repo_name)
-    
-    # Normalize paths for Windows
-    workspace_path = os.path.normpath(workspace_path)
-    repo_path = os.path.normpath(repo_path)
-    
-    try:
-        # Create workspace directory if it doesn't exist (only needed in production mode)
-        if not DEVELOPMENT_MODE and not os.path.exists(workspace_path):
-            os.makedirs(workspace_path)
-            print(f"Created workspace directory: {workspace_path}")
-        
-        # Check if repository already exists
-        if os.path.exists(repo_path) and os.path.isdir(repo_path):
-            # Check if it's a valid git repository
-            git_dir = os.path.join(repo_path, '.git')
-            if os.path.exists(git_dir):
-                print(f"Repository already exists at: {repo_path}")
-                return True
-            else:
-                print(f"Directory exists but is not a git repository: {repo_path}")
-                # Remove the directory if it's not a git repo
-                shutil.rmtree(repo_path)
-        
-        # Clone the repository
-        print(f"Cloning repository from {repo_url} to {repo_path}")
-        result = subprocess.run([
-            'git', 'clone', repo_url, repo_path
-        ], capture_output=True, text=True, timeout=60)
-        
-        if result.returncode == 0:
-            print(f"Successfully cloned repository to: {repo_path}")
-            return True
-        else:
-            print(f"Failed to clone repository. Error: {result.stderr}")
-            return False
-            
-    except subprocess.TimeoutExpired:
-        print("Git clone operation timed out")
-        return False
-    except Exception as e:
-        print(f"Error checking/cloning repository: {str(e)}")
-        return False
-
-def get_repository_path(participant_id):
-    """
-    Get the path to the participant's repository.
-    Returns the absolute path to the repository.
-    """
-    if DEVELOPMENT_MODE:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        workspace_path = current_dir
-        repo_name = f"study-{participant_id}"
-        repo_path = os.path.join(workspace_path, repo_name)
-    else:
-        home_dir = os.path.expanduser("~")
-        workspace_path = os.path.join(home_dir, "workspace")
-        repo_name = f"study-{participant_id}"
-        repo_path = os.path.join(workspace_path, repo_name)
-    
-    return os.path.normpath(repo_path)
-
-def commit_code_changes(participant_id, study_stage, commit_message):
-    """
-    Commit any changes in the participant's repository with a descriptive message.
-    Returns True if successful, False otherwise.
-    """
-    repo_path = get_repository_path(participant_id)
-    original_cwd = os.getcwd()  # Save current working directory
-    
-    try:
-        # Check if repository exists
-        if not os.path.exists(repo_path):
-            print(f"Repository does not exist at: {repo_path}")
-            return False
-        
-        # Check if it's a valid git repository
-        git_dir = os.path.join(repo_path, '.git')
-        if not os.path.exists(git_dir):
-            print(f"Not a valid git repository: {repo_path}")
-            return False
-        
-        # Ensure git config is set up
-        ensure_git_config(repo_path, participant_id)
-        
-        # Change to repository directory
-        os.chdir(repo_path)
-        
-        # Check if there are any changes to commit
-        result = subprocess.run([
-            'git', 'status', '--porcelain'
-        ], capture_output=True, text=True, timeout=10)
-        
-        if result.returncode != 0:
-            print(f"Failed to check git status. Error: {result.stderr}")
-            return False
-        
-        # If no changes, nothing to commit
-        if not result.stdout.strip():
-            print(f"No changes to commit in repository: {repo_path}")
-            return True
-        
-        # Add all changes
-        result = subprocess.run([
-            'git', 'add', '.'
-        ], capture_output=True, text=True, timeout=10)
-        
-        if result.returncode != 0:
-            print(f"Failed to add changes. Error: {result.stderr}")
-            return False
-        
-        # Create timestamp for commit
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        full_commit_message = f"[Stage {study_stage}] {commit_message} - {timestamp}"
-        
-        # Commit changes
-        result = subprocess.run([
-            'git', 'commit', '-m', full_commit_message
-        ], capture_output=True, text=True, timeout=10)
-        
-        if result.returncode != 0:
-            print(f"Failed to commit changes. Error: {result.stderr}")
-            return False
-        
-        print(f"Successfully committed changes: {full_commit_message}")
-        
-        # Push changes to remote repository if we have authentication
-        if GITHUB_TOKEN:
-            # Set up the authenticated remote URL
-            repo_name = f"study-{participant_id}"
-            authenticated_url = get_authenticated_repo_url(repo_name)
-            
-            # Update the origin URL to use authentication
-            result = subprocess.run([
-                'git', 'remote', 'set-url', 'origin', authenticated_url
-            ], capture_output=True, text=True, timeout=10)
-            
-            if result.returncode != 0:
-                print(f"Warning: Failed to set authenticated remote URL. Error: {result.stderr}")
-            
-            # Push changes to remote repository
-            result = subprocess.run([
-                'git', 'push', 'origin', 'main'
-            ], capture_output=True, text=True, timeout=30)
-            
-            if result.returncode == 0:
-                print(f"Successfully pushed changes to remote repository")
-            else:
-                # Try pushing to 'master' branch if 'main' doesn't exist
-                result = subprocess.run([
-                    'git', 'push', 'origin', 'master'
-                ], capture_output=True, text=True, timeout=30)
-                
-                if result.returncode == 0:
-                    print(f"Successfully pushed changes to remote repository (master branch)")
-                else:
-                    print(f"Warning: Failed to push changes to remote repository. Error: {result.stderr}")
-        else:
-            print("No GitHub token provided - changes committed locally only")
-        
-        return True
-        
-    except subprocess.TimeoutExpired:
-        print("Git operation timed out")
-        return False
-    except Exception as e:
-        print(f"Error committing code changes: {str(e)}")
-        return False
-    finally:
-        # Always restore the original working directory
-        try:
-            os.chdir(original_cwd)
-        except Exception as e:
-            print(f"Warning: Failed to restore original working directory: {str(e)}")
-
-def ensure_git_config(repo_path, participant_id):
-    """
-    Ensure git config is set up for commits in the repository.
-    """
-    try:
-        original_cwd = os.getcwd()
-        os.chdir(repo_path)
-        
-        # Check if user.name is set
-        result = subprocess.run([
-            'git', 'config', 'user.name'
-        ], capture_output=True, text=True, timeout=5)
-        
-        if result.returncode != 0 or not result.stdout.strip():
-            # Set user name
-            subprocess.run([
-                'git', 'config', 'user.name', f'{participant_id}'
-            ], capture_output=True, text=True, timeout=5)
-            print(f"Set git user.name for participant {participant_id}")
-        
-        # Check if user.email is set
-        result = subprocess.run([
-            'git', 'config', 'user.email'
-        ], capture_output=True, text=True, timeout=5)
-        
-        if result.returncode != 0 or not result.stdout.strip():
-            # Set user email
-            subprocess.run([
-                'git', 'config', 'user.email', f'{participant_id}@study.local'
-            ], capture_output=True, text=True, timeout=5)
-            print(f"Set git user.email for participant {participant_id}")
-            
-        return True
-        
-    except Exception as e:
-        print(f"Warning: Failed to set git config: {str(e)}")
-        return False
-    finally:
-        try:
-            os.chdir(original_cwd)
-        except Exception as e:
-            print(f"Warning: Failed to restore working directory: {str(e)}")
-
-def push_code_changes(participant_id):
-    """
-    Push committed changes to the remote repository.
-    Returns True if successful, False otherwise.
-    """
-    repo_path = get_repository_path(participant_id)
-    original_cwd = os.getcwd()  # Save current working directory
-    
-    try:
-        # Check if repository exists
-        if not os.path.exists(repo_path):
-            print(f"Repository does not exist at: {repo_path}")
-            return False
-        
-        # Check if it's a valid git repository
-        git_dir = os.path.join(repo_path, '.git')
-        if not os.path.exists(git_dir):
-            print(f"Not a valid git repository: {repo_path}")
-            return False
-        
-        # Change to repository directory
-        os.chdir(repo_path)
-        
-        # Set up the authenticated remote URL if we have a token
-        if GITHUB_TOKEN:
-            repo_name = f"study-{participant_id}"
-            authenticated_url = get_authenticated_repo_url(repo_name)
-            
-            # Update the origin URL to use authentication
-            result = subprocess.run([
-                'git', 'remote', 'set-url', 'origin', authenticated_url
-            ], capture_output=True, text=True, timeout=10)
-            
-            if result.returncode != 0:
-                print(f"Warning: Failed to set authenticated remote URL. Error: {result.stderr}")
-        
-        # Push changes to remote repository
-        result = subprocess.run([
-            'git', 'push', 'origin', 'main'
-        ], capture_output=True, text=True, timeout=30)
-        
-        if result.returncode == 0:
-            print(f"Successfully pushed changes to remote repository for participant {participant_id}")
-            return True
-        else:
-            # Try pushing to 'master' branch if 'main' doesn't exist
-            result = subprocess.run([
-                'git', 'push', 'origin', 'master'
-            ], capture_output=True, text=True, timeout=30)
-            
-            if result.returncode == 0:
-                print(f"Successfully pushed changes to remote repository (master branch) for participant {participant_id}")
-                return True
-            else:
-                print(f"Failed to push changes to remote repository. Error: {result.stderr}")
-                return False
-        
-    except subprocess.TimeoutExpired:
-        print("Git push operation timed out")
-        return False
-    except Exception as e:
-        print(f"Error pushing code changes: {str(e)}")
-        return False
-    finally:
-        # Always restore the original working directory
-        try:
-            os.chdir(original_cwd)
-        except Exception as e:
-            print(f"Warning: Failed to restore original working directory: {str(e)}")
-
 @app.route('/')
 def home():
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     
     # Stage 2 participants should go directly to welcome back screen
     if study_stage == 2:
@@ -568,10 +43,187 @@ def clear_session():
     session.clear()
     return "Session cleared! <a href='/'>Go to home</a>"
 
+@app.route('/debug-session')
+def debug_session():
+    """Debug route to display complete session state during development"""
+    if not DEVELOPMENT_MODE:
+        return "Only available in development mode", 403
+    
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
+    
+    # Get session data for both stages
+    stage1_data = get_session_data(session, 1)
+    stage2_data = get_session_data(session, 2)
+    
+    # Calculate timer info if timer is started
+    timer_info = {}
+    for stage, data in [(1, stage1_data), (2, stage2_data)]:
+        if data['timer_start']:
+            elapsed = time.time() - data['timer_start']
+            remaining = max(0, 2400 - elapsed)
+            timer_info[stage] = {
+                'elapsed_seconds': elapsed,
+                'elapsed_minutes': elapsed / 60,
+                'remaining_seconds': remaining,
+                'remaining_minutes': remaining / 60,
+                'timer_start_timestamp': data['timer_start'],
+                'timer_start_readable': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data['timer_start']))
+            }
+        else:
+            timer_info[stage] = {'status': 'Not started'}
+    
+    # Build HTML response
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Development Session Debug</title>
+        <style>
+            body {{ font-family: monospace; margin: 20px; }}
+            .section {{ margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }}
+            .stage {{ background: #f8f9fa; }}
+            .timer {{ background: #fff3cd; }}
+            .session {{ background: #d4edda; }}
+            .actions {{ background: #cce7ff; }}
+            table {{ border-collapse: collapse; width: 100%; margin: 10px 0; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background: #f2f2f2; }}
+            .btn {{ padding: 8px 16px; margin: 5px; text-decoration: none; border-radius: 3px; display: inline-block; }}
+            .btn-danger {{ background: #dc3545; color: white; }}
+            .btn-primary {{ background: #007bff; color: white; }}
+            .btn-success {{ background: #28a745; color: white; }}
+        </style>
+    </head>
+    <body>
+        <h1>🐛 Development Session Debug</h1>
+        <p><strong>Current Time:</strong> {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+        <p><strong>Participant ID:</strong> {participant_id}</p>
+        <p><strong>Current Study Stage:</strong> {study_stage}</p>
+        <p><strong>Development Mode:</strong> {DEVELOPMENT_MODE}</p>
+        
+        <div class="section actions">
+            <h3>🔧 Quick Actions</h3>
+            <a href="/clear-session" class="btn btn-danger">Clear All Session Data</a>
+            <a href="/task" class="btn btn-primary">Go to Task Page</a>
+            <a href="/" class="btn btn-success">Go to Home</a>
+            <a href="/debug-session" class="btn btn-primary">Refresh Debug</a>
+        </div>
+        
+        <div class="section session">
+            <h3>📋 Raw Session Data</h3>
+            <table>
+                <tr><th>Key</th><th>Value</th></tr>
+    """
+    
+    # Add raw session data
+    for key, value in session.items():
+        html += f"<tr><td>{key}</td><td>{value}</td></tr>"
+    
+    html += """
+            </table>
+        </div>
+    """
+    
+    # Add stage-specific data
+    for stage in [1, 2]:
+        data = stage1_data if stage == 1 else stage2_data
+        timer = timer_info[stage]
+        
+        html += f"""
+        <div class="section stage">
+            <h3>🎯 Stage {stage} Data</h3>
+            <table>
+                <tr><th>Property</th><th>Value</th></tr>
+                <tr><td>Current Task</td><td>{data['current_task']}</td></tr>
+                <tr><td>Completed Tasks</td><td>{data['completed_tasks']} (Count: {len(data['completed_tasks'])})</td></tr>
+                <tr><td>Timer Finished</td><td>{data['timer_finished']}</td></tr>
+                <tr><td>Timer Start</td><td>{data['timer_start']}</td></tr>
+            </table>
+        </div>
+        
+        <div class="section timer">
+            <h3>⏰ Stage {stage} Timer Info</h3>
+            <table>
+                <tr><th>Property</th><th>Value</th></tr>
+        """
+        
+        if 'status' in timer:
+            html += f"<tr><td>Status</td><td>{timer['status']}</td></tr>"
+        else:
+            html += f"""
+                <tr><td>Start Time</td><td>{timer['timer_start_readable']}</td></tr>
+                <tr><td>Start Timestamp</td><td>{timer['timer_start_timestamp']}</td></tr>
+                <tr><td>Elapsed Time</td><td>{timer['elapsed_seconds']:.1f} seconds ({timer['elapsed_minutes']:.1f} minutes)</td></tr>
+                <tr><td>Remaining Time</td><td>{timer['remaining_seconds']:.1f} seconds ({timer['remaining_minutes']:.1f} minutes)</td></tr>
+                <tr><td>Timer Status</td><td>{'⚠️ EXPIRED' if timer['remaining_seconds'] <= 0 else '✅ Running'}</td></tr>
+            """
+        
+        html += """
+            </table>
+        </div>
+        """
+    
+    # Add task requirements info
+    task_requirements = get_tasks_for_stage(study_stage, TASK_REQUIREMENTS)
+    html += f"""
+        <div class="section">
+            <h3>📝 Task Requirements (Stage {study_stage})</h3>
+            <p><strong>Total Tasks:</strong> {len(task_requirements)}</p>
+            <table>
+                <tr><th>Task ID</th><th>Title</th><th>Status</th></tr>
+    """
+    
+    current_task = stage1_data['current_task'] if study_stage == 1 else stage2_data['current_task']
+    completed_tasks = stage1_data['completed_tasks'] if study_stage == 1 else stage2_data['completed_tasks']
+    
+    for req in task_requirements:
+        if req['id'] in completed_tasks:
+            status = "✅ Completed"
+        elif req['id'] == current_task:
+            status = "🔄 Current"
+        elif req['id'] < current_task:
+            status = "❓ Skipped"
+        else:
+            status = "🔒 Locked"
+        
+        html += f"<tr><td>{req['id']}</td><td>{req['title']}</td><td>{status}</td></tr>"
+    
+    html += """
+            </table>
+        </div>
+        
+        <div class="section">
+            <h3>🔍 VS Code Status</h3>
+            <table>
+                <tr><th>Stage</th><th>VS Code Opened</th></tr>
+    """
+    
+    for stage in [1, 2]:
+        vscode_key = f'vscode_opened_stage{stage}'
+        vscode_status = "✅ Yes" if session.get(vscode_key, False) else "❌ No"
+        html += f"<tr><td>Stage {stage}</td><td>{vscode_status}</td></tr>"
+    
+    html += """
+            </table>
+        </div>
+        
+        <script>
+            // Auto-refresh every 5 seconds
+            setTimeout(() => {
+                window.location.reload();
+            }, 5000);
+        </script>
+    </body>
+    </html>
+    """
+    
+    return html
+
 @app.route('/background-questionnaire')
 def background_questionnaire():
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     
     # Stage 2 participants should skip the background questionnaire
     if study_stage == 2:
@@ -591,13 +243,13 @@ def background_questionnaire():
 
 @app.route('/ux-questionnaire')
 def ux_questionnaire():
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     ux_survey_url = os.getenv('UX_SURVEY_URL', '#')
     
     # Commit any remaining code changes before leaving for the survey
     commit_message = "Session ended - proceeding to UX questionnaire"
-    commit_success = commit_code_changes(participant_id, study_stage, commit_message)
+    commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     
     if commit_success:
         print(f"Final code changes committed before UX survey for participant {participant_id}")
@@ -616,8 +268,8 @@ def ux_questionnaire():
 
 @app.route('/tutorial')
 def tutorial():
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     
     # Stage 2 participants should skip the tutorial
     if study_stage == 2:
@@ -631,8 +283,8 @@ def tutorial():
 
 @app.route('/welcome-back')
 def welcome_back():
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     coding_condition = get_coding_condition(participant_id)
     
     # Redirect to home if this is actually stage 1
@@ -646,12 +298,12 @@ def welcome_back():
 
 @app.route('/task')
 def task():
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     coding_condition = get_coding_condition(participant_id)
     
     # Get stage-specific session data
-    session_data = get_session_data(study_stage)
+    session_data = get_session_data(session, study_stage)
     current_task = session_data['current_task']
     completed_tasks = session_data['completed_tasks']
     timer_start = session_data['timer_start']
@@ -660,12 +312,12 @@ def task():
     # Initialize timer if not started yet
     if timer_start is None:
         timer_start = time.time()
-        update_session_data(study_stage, timer_start=timer_start)
+        update_session_data(session, study_stage, timer_start=timer_start)
         
         # Make an initial commit to mark the start of this coding session
         coding_condition = get_coding_condition(participant_id)
         commit_message = f"Started coding session - Condition: {coding_condition}"
-        commit_success = commit_code_changes(participant_id, study_stage, commit_message)
+        commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
         
         if commit_success:
             print(f"Initial commit made for session start - participant {participant_id}, stage {study_stage}")
@@ -677,7 +329,7 @@ def task():
     remaining_time = max(0, 200 - elapsed_time)  # 40 minutes = 2400 seconds
     
     # Get tasks appropriate for the current study stage
-    task_requirements = get_tasks_for_stage(study_stage)
+    task_requirements = get_tasks_for_stage(study_stage, TASK_REQUIREMENTS)
     
     # Check if this is the first time accessing the task page for this stage
     # If so, automatically open VS Code with the repository
@@ -689,7 +341,7 @@ def task():
         session[vscode_opened_key] = True
         
         # Try to open VS Code with the repository
-        vscode_success = open_vscode_with_repository(participant_id)
+        vscode_success = open_vscode_with_repository(participant_id, DEVELOPMENT_MODE)
         if vscode_success:
             print(f"VS Code opened successfully for participant {participant_id}, stage {study_stage}")
         else:
@@ -715,10 +367,10 @@ def task():
 
 @app.route('/open-vscode')
 def open_vscode():
-    participant_id = get_participant_id()
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     
     # Try to open VS Code with the repository
-    vscode_success = open_vscode_with_repository(participant_id)
+    vscode_success = open_vscode_with_repository(participant_id, DEVELOPMENT_MODE)
     
     if vscode_success:
         print(f"VS Code opened successfully for participant {participant_id} (manual request)")
@@ -730,17 +382,17 @@ def open_vscode():
 
 @app.route('/complete-task', methods=['POST'])
 def complete_task():
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     task_id = int(request.form.get('task_id', 1))
     
     # Get stage-specific session data
-    session_data = get_session_data(study_stage)
+    session_data = get_session_data(session, study_stage)
     completed_tasks = session_data['completed_tasks']
     timer_finished = session_data['timer_finished']
     
     # Get tasks appropriate for the current study stage
-    task_requirements = get_tasks_for_stage(study_stage)
+    task_requirements = get_tasks_for_stage(study_stage, TASK_REQUIREMENTS)
     
     # Debug logging
     print(f"Complete task - Participant: {participant_id}, Stage: {study_stage}")
@@ -749,7 +401,7 @@ def complete_task():
     
     if task_id not in completed_tasks:
         completed_tasks.append(task_id)
-        update_session_data(study_stage, completed_tasks=completed_tasks)
+        update_session_data(session, study_stage, completed_tasks=completed_tasks)
         print(f"Task {task_id} marked as completed for stage {study_stage}")
         
         # Commit code changes when task is completed
@@ -758,7 +410,7 @@ def complete_task():
             task_title = task_requirements[task_id - 1].get('title', f'Task {task_id}')
         
         commit_message = f"Completed task {task_id}: {task_title}"
-        commit_success = commit_code_changes(participant_id, study_stage, commit_message)
+        commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
         
         if commit_success:
             print(f"Code changes committed for task {task_id}")
@@ -768,7 +420,7 @@ def complete_task():
     # Only move to next task if timer hasn't finished
     if not timer_finished and task_id < len(task_requirements):
         next_task = task_id + 1
-        update_session_data(study_stage, current_task=next_task)
+        update_session_data(session, study_stage, current_task=next_task)
         print(f"Moving to next task: {next_task}")
     else:
         print(f"Timer finished or all tasks completed for stage {study_stage}")
@@ -778,15 +430,15 @@ def complete_task():
 @app.route('/timer-expired', methods=['POST'])
 def timer_expired():
     """Handle when the 40-minute timer expires"""
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     
     # Mark timer as finished
-    update_session_data(study_stage, timer_finished=True)
+    update_session_data(session, study_stage, timer_finished=True)
     
     # Commit any code changes when timer expires
     commit_message = "Timer expired - 40 minutes completed"
-    commit_success = commit_code_changes(participant_id, study_stage, commit_message)
+    commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     
     if commit_success:
         print(f"Code changes committed when timer expired for participant {participant_id}")
@@ -798,10 +450,10 @@ def timer_expired():
 @app.route('/get-timer-status')
 def get_timer_status():
     """Get current timer status"""
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     
-    session_data = get_session_data(study_stage)
+    session_data = get_session_data(session, study_stage)
     timer_start = session_data['timer_start']
     timer_finished = session_data['timer_finished']
     
@@ -820,56 +472,6 @@ def get_timer_status():
         'timer_finished': timer_finished
     })
 
-def test_github_connectivity(participant_id):
-    """
-    Test GitHub connectivity and authentication by checking if the repository exists.
-    Returns True if the repository is accessible, False otherwise.
-    """
-    try:
-        repo_name = f"study-{participant_id}"
-        
-        if GITHUB_TOKEN:
-            # Test with authenticated request
-            headers = {'Authorization': f'token {GITHUB_TOKEN}'}
-            response = requests.get(
-                f"https://api.github.com/repos/{GITHUB_ORG}/{repo_name}",
-                headers=headers,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                print(f"✓ GitHub repository {repo_name} is accessible with authentication")
-                return True
-            elif response.status_code == 404:
-                print(f"✗ Repository {repo_name} not found or not accessible")
-                return False
-            elif response.status_code == 401:
-                print(f"✗ GitHub authentication failed - check your token")
-                return False
-            else:
-                print(f"✗ GitHub API returned status code: {response.status_code}")
-                return False
-        else:
-            # Test public access without authentication
-            response = requests.get(
-                f"https://api.github.com/repos/{GITHUB_ORG}/{repo_name}",
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                print(f"✓ Public repository {repo_name} is accessible")
-                return True
-            else:
-                print(f"✗ Repository {repo_name} not publicly accessible (status: {response.status_code})")
-                return False
-                
-    except requests.exceptions.RequestException as e:
-        print(f"✗ Failed to connect to GitHub API: {str(e)}")
-        return False
-    except Exception as e:
-        print(f"✗ Error testing GitHub connectivity: {str(e)}")
-        return False
-
 if __name__ == '__main__':
     # Print mode information
     if DEVELOPMENT_MODE:
@@ -882,8 +484,8 @@ if __name__ == '__main__':
         print("Running in production mode")
     
     # Get participant ID and check/clone repository on startup
-    participant_id = get_participant_id()
-    study_stage = get_study_stage(participant_id)
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE)
     print(f"Starting server for participant: {participant_id}")
     print(f"Study stage: {study_stage} ({'Repository not found' if study_stage == 1 else 'Repository exists'})")
     
@@ -894,12 +496,12 @@ if __name__ == '__main__':
     else:
         print("No GitHub token provided - using public access only")
     
-    github_available = test_github_connectivity(participant_id)
+    github_available = test_github_connectivity(participant_id, GITHUB_TOKEN, GITHUB_ORG)
     if not github_available:
         print("Warning: GitHub repository may not be accessible")
     
     # Check and clone repository if needed
     print("\nChecking repository...")
-    check_and_clone_repository(participant_id)
+    check_and_clone_repository(participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     
     app.run(host='127.0.0.1', port=8085, debug=True)
