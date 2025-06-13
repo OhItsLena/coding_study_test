@@ -267,6 +267,7 @@ class StudyLogger:
         # On Windows, prevent terminal window from showing
         if platform.system() == "Windows":
             kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            kwargs['shell'] = True  # Use shell=True to handle Windows paths correctly
         
         return kwargs
     

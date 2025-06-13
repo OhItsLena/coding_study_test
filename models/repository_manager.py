@@ -518,12 +518,13 @@ class VSCodeManager:
         """
         kwargs = {
             'capture_output': True,
-            'text': True
+            'text': True,
         }
         
         # On Windows, prevent terminal window from showing
         if platform.system() == "Windows":
             kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            kwargs['shell'] = True  # Use shell=True for Windows compatibility
         
         return kwargs
     
