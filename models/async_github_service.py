@@ -120,6 +120,8 @@ class AsyncGitHubService:
                 return self._process_test_connectivity(operation)
             elif operation.operation_type == 'mark_stage_transition':
                 return self._process_mark_stage_transition(operation)
+            elif operation.operation_type == 'save_vscode_workspace_storage':
+                return self._process_save_vscode_workspace_storage(operation)
             else:
                 print(f"AsyncGitHubService: Unknown operation type: {operation.operation_type}")
                 return False
@@ -189,6 +191,20 @@ class AsyncGitHubService:
             print(f"AsyncGitHubService: Stage transition marking failed: {str(e)}")
             return False
     
+    def _process_save_vscode_workspace_storage(self, operation: GitHubOperation) -> bool:
+        """Process VS Code workspace storage saving."""
+        try:
+            return self.study_logger.save_vscode_workspace_storage(
+                participant_id=operation.participant_id,
+                study_stage=operation.kwargs.get('study_stage'),
+                development_mode=operation.kwargs.get('development_mode'),
+                github_token=operation.kwargs.get('github_token'),
+                github_org=operation.kwargs.get('github_org')
+            )
+        except Exception as e:
+            print(f"AsyncGitHubService: VS Code workspace storage saving failed: {str(e)}")
+            return False
+    
     # Public async methods
     def queue_log_route_visit(self, participant_id: str, route_name: str, 
                             development_mode: bool, study_stage: int,
@@ -253,6 +269,21 @@ class AsyncGitHubService:
         )
         self.operation_queue.put(operation)
         print(f"AsyncGitHubService: Queued stage transition for {participant_id}")
+    
+    def queue_save_vscode_workspace_storage(self, participant_id: str, study_stage: int,
+                                          development_mode: bool, github_token: Optional[str] = None,
+                                          github_org: Optional[str] = None):
+        """Queue a VS Code workspace storage saving operation."""
+        operation = GitHubOperation(
+            operation_type='save_vscode_workspace_storage',
+            participant_id=participant_id,
+            study_stage=study_stage,
+            development_mode=development_mode,
+            github_token=github_token,
+            github_org=github_org
+        )
+        self.operation_queue.put(operation)
+        print(f"AsyncGitHubService: Queued VS Code workspace storage save for {participant_id}")
     
     def get_stats(self) -> Dict[str, Any]:
         """Get current operation statistics."""

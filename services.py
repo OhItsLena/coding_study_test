@@ -192,6 +192,28 @@ def get_stage_transition_history(participant_id, development_mode):
     return _study_logger.get_stage_transition_history(participant_id, development_mode)
 
 
+def save_vscode_workspace_storage(participant_id, study_stage, development_mode, 
+                                github_token=None, github_org=None):
+    """Save VS Code workspace storage for a participant at the end of a coding stage."""
+    return _study_logger.save_vscode_workspace_storage(
+        participant_id, study_stage, development_mode, github_token, github_org
+    )
+
+
+def save_vscode_workspace_storage_async(participant_id, study_stage, development_mode, 
+                                      github_token=None, github_org=None):
+    """Save VS Code workspace storage asynchronously."""
+    _async_github_service.queue_save_vscode_workspace_storage(
+        participant_id, study_stage, development_mode, github_token, github_org
+    )
+    return True  # Return immediately
+
+
+def get_vscode_workspace_storage_path():
+    """Get the platform-specific VS Code workspace storage path."""
+    return _study_logger.get_vscode_workspace_storage_path()
+
+
 # Session Tracking Functions
 def should_log_route(session, route_name, study_stage):
     """Check if a route should be logged."""

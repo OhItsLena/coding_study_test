@@ -6,6 +6,9 @@ Handles route logging, session tracking, and study flow monitoring.
 import os
 import json
 import subprocess
+import platform
+import shutil
+import zipfile
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
@@ -423,6 +426,119 @@ class StudyLogger:
         except Exception as e:
             print(f"Error reading stage transition history: {str(e)}")
             return []
+    
+    def get_vscode_workspace_storage_path(self) -> Optional[str]:
+        """
+        Get the platform-specific VS Code workspace storage path.
+        
+        Returns:
+            The absolute path to VS Code workspace storage directory, or None if not found
+        """
+        system = platform.system()
+        
+        if system == "Windows":
+            # Windows: %APPDATA%\Code\User\workspaceStorage
+            appdata = os.environ.get('APPDATA')
+            if appdata:
+                return os.path.join(appdata, 'Code', 'User', 'workspaceStorage')
+        
+        elif system == "Darwin":  # macOS
+            # macOS: ~/Library/Application Support/Code/User/workspaceStorage
+            home = os.path.expanduser("~")
+            return os.path.join(home, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage')
+        
+        elif system == "Linux":
+            # Linux: ~/.config/Code/User/workspaceStorage
+            home = os.path.expanduser("~")
+            return os.path.join(home, '.config', 'Code', 'User', 'workspaceStorage')
+        
+        return None
+    
+    def save_vscode_workspace_storage(self, participant_id: str, study_stage: int, 
+                                    development_mode: bool, github_token: Optional[str] = None,
+                                    github_org: Optional[str] = None) -> bool:
+        """
+        Save VS Code workspace storage for a participant at the end of a coding stage.
+        Creates a compressed archive of the workspace storage and commits it to the logging repository.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            study_stage: The study stage (1 or 2)
+            development_mode: Whether running in development mode
+            github_token: Optional GitHub token for pushing logs
+            github_org: Optional GitHub organization
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get VS Code workspace storage path
+            vscode_storage_path = self.get_vscode_workspace_storage_path()
+            if not vscode_storage_path or not os.path.exists(vscode_storage_path):
+                print(f"VS Code workspace storage not found at: {vscode_storage_path}")
+                return False
+            
+            # Ensure logging repository exists
+            if not self.ensure_logging_repository(participant_id, development_mode, github_token, github_org):
+                print("Failed to ensure logging repository exists")
+                return False
+            
+            logs_path = self.get_logs_directory_path(participant_id, development_mode)
+            original_cwd = os.getcwd()
+            
+            # Switch to logs directory
+            os.chdir(logs_path)
+            
+            # Ensure we're on logging branch
+            subprocess.run(['git', 'checkout', 'logging'], capture_output=True, text=True, timeout=5)
+            
+            # Create vscode-storage directory if it doesn't exist
+            vscode_logs_dir = os.path.join(logs_path, 'vscode-storage')
+            if not os.path.exists(vscode_logs_dir):
+                os.makedirs(vscode_logs_dir)
+            
+            # Create timestamped archive filename
+            timestamp = datetime.now()
+            archive_filename = f"workspace_storage_stage{study_stage}_{timestamp.strftime('%Y%m%d_%H%M%S')}.zip"
+            archive_path = os.path.join(vscode_logs_dir, archive_filename)
+            
+            # Create zip archive of workspace storage
+            print(f"Creating VS Code workspace storage archive: {archive_filename}")
+            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(vscode_storage_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Get relative path from workspace storage directory
+                        arcname = os.path.relpath(file_path, vscode_storage_path)
+                        try:
+                            zipf.write(file_path, arcname)
+                        except (OSError, PermissionError) as e:
+                            # Skip files that can't be read (e.g., locked files)
+                            print(f"Skipping file due to permission error: {file_path} - {e}")
+                            continue
+            
+            # Add files to git
+            subprocess.run(['git', 'add', 'vscode-storage/'], capture_output=True, text=True, timeout=10)
+            
+            # Commit the VS Code workspace storage
+            commit_message = f"Save VS Code workspace storage for stage {study_stage} at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+            result = subprocess.run(['git', 'commit', '-m', commit_message], capture_output=True, text=True, timeout=15)
+            
+            if result.returncode == 0:
+                print(f"Successfully saved VS Code workspace storage for stage {study_stage}")
+                return True
+            else:
+                print(f"Failed to commit VS Code workspace storage: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            print(f"Error saving VS Code workspace storage: {str(e)}")
+            return False
+        finally:
+            try:
+                os.chdir(original_cwd)
+            except Exception as e:
+                print(f"Error returning to original directory: {str(e)}")
 
 
 class SessionTracker:

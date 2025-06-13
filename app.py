@@ -8,7 +8,8 @@ from services import (
     check_and_clone_repository, commit_code_changes, test_github_connectivity,
     setup_repository_for_stage, log_route_visit, should_log_route, mark_route_as_logged,
     mark_stage_transition, get_async_github_stats, get_async_github_queue_size,
-    test_github_connectivity_async, stop_async_github_service, wait_for_async_github_completion
+    test_github_connectivity_async, stop_async_github_service, wait_for_async_github_completion,
+    save_vscode_workspace_storage, save_vscode_workspace_storage_async
 )
 
 # Load environment variables from .env file
@@ -189,6 +190,25 @@ def ux_questionnaire():
         print(f"Final code changes committed before UX survey for participant {participant_id}")
     else:
         print(f"No changes to commit or commit failed before UX survey for participant {participant_id}")
+    
+    # Save VS Code workspace storage at the end of the coding session
+    print(f"Saving VS Code workspace storage for participant {participant_id}, stage {study_stage}")
+    if ASYNC_GITHUB_MODE:
+        # Use async mode for background processing
+        save_vscode_workspace_storage_async(
+            participant_id, study_stage, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG
+        )
+        print(f"VS Code workspace storage save queued for background processing for participant {participant_id}")
+    else:
+        # Use synchronous mode
+        vscode_storage_success = save_vscode_workspace_storage(
+            participant_id, study_stage, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG
+        )
+        
+        if vscode_storage_success:
+            print(f"VS Code workspace storage successfully saved for participant {participant_id}")
+        else:
+            print(f"Failed to save VS Code workspace storage for participant {participant_id}")
     
     if ux_survey_url == '#':
         return render_template('survey_error.jinja', 
