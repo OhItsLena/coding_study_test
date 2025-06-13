@@ -65,7 +65,7 @@ class TestServicesParticipantManagement:
         
         result = services.get_coding_condition('test-participant-001')
         assert result == 'ai-assisted'
-        mock_participant_manager.get_coding_condition.assert_called_once_with('test-participant-001')
+        mock_participant_manager.get_coding_condition.assert_called_once_with('test-participant-001', False, "vibe")
 
 
 class TestServicesAzureService:

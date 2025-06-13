@@ -94,3 +94,43 @@ class AzureMetadataService:
         except Exception:
             # If we can't reach the metadata service or any other error occurs
             return "Study Participant"
+    
+    @classmethod
+    def get_coding_condition(cls, development_mode: bool, dev_coding_condition: str = "vibe") -> str:
+        """
+        Get the coding_condition from Azure VM tags using the Instance Metadata Service.
+        In development mode, returns the dev_coding_condition parameter.
+        
+        Args:
+            development_mode: Whether running in development mode
+            dev_coding_condition: Coding condition to use in development mode
+        
+        Returns:
+            The coding condition ('vibe' or 'ai-assisted'), defaults to 'vibe' if not found
+        """
+        if development_mode:
+            print(f"Development mode: Using mocked coding condition: {dev_coding_condition}")
+            return dev_coding_condition
+        
+        try:
+            response = requests.get(cls.METADATA_URL_TAGS, headers=cls.HEADERS, timeout=cls.TIMEOUT)
+            
+            if response.status_code == 200:
+                tags_text = response.text
+                # Tags are returned as semicolon-separated key:value pairs
+                for tag in tags_text.split(';'):
+                    if ':' in tag:
+                        key, value = tag.split(':', 1)
+                        if key.strip().lower() == 'coding_condition':
+                            condition = value.strip().lower()
+                            if condition in ['vibe', 'ai-assisted']:
+                                return condition
+                            else:
+                                print(f"Invalid coding_condition tag value: {value.strip()}")
+            
+            # Default to 'vibe' if tag not found or invalid
+            return "vibe"
+        except Exception as e:
+            print(f"Error getting coding condition from Azure VM tags: {str(e)}")
+            # Default to 'vibe' if we can't reach the metadata service or any other error occurs
+            return "vibe"

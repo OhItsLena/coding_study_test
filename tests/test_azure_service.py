@@ -116,3 +116,65 @@ class TestAzureMetadataService:
         stage = service.get_study_stage("test-participant", False, 2)
         
         assert stage == 1  # Default fallback
+    
+    def test_get_coding_condition_development_mode(self):
+        """Test getting coding condition in development mode."""
+        service = AzureMetadataService()
+        
+        # Test default dev_coding_condition
+        condition = service.get_coding_condition(True, "vibe")
+        assert condition == "vibe"
+        
+        # Test explicit dev_coding_condition
+        condition = service.get_coding_condition(True, "ai-assisted")
+        assert condition == "ai-assisted"
+    
+    @patch('models.azure_service.requests.get')
+    def test_get_coding_condition_production_success(self, mock_get):
+        """Test getting coding condition from Azure metadata successfully."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = "participant_id:test-participant;coding_condition:ai-assisted;environment:production"
+        mock_get.return_value = mock_response
+        
+        service = AzureMetadataService()
+        condition = service.get_coding_condition(False, "vibe")
+        
+        assert condition == "ai-assisted"
+        mock_get.assert_called_once()
+    
+    @patch('models.azure_service.requests.get')
+    def test_get_coding_condition_production_failure(self, mock_get):
+        """Test getting coding condition when Azure metadata fails."""
+        mock_get.side_effect = requests.RequestException("Connection failed")
+        
+        service = AzureMetadataService()
+        condition = service.get_coding_condition(False, "ai-assisted")
+        
+        assert condition == "vibe"  # Default fallback
+    
+    @patch('models.azure_service.requests.get')
+    def test_get_coding_condition_invalid_value(self, mock_get):
+        """Test getting coding condition with invalid value in metadata."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = "participant_id:test-participant;coding_condition:invalid-condition;environment:production"
+        mock_get.return_value = mock_response
+        
+        service = AzureMetadataService()
+        condition = service.get_coding_condition(False, "ai-assisted")
+        
+        assert condition == "vibe"  # Default fallback
+    
+    @patch('models.azure_service.requests.get')
+    def test_get_coding_condition_missing_tag(self, mock_get):
+        """Test getting coding condition when coding_condition tag is missing."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = "participant_id:test-participant;study_stage:1;environment:production"
+        mock_get.return_value = mock_response
+        
+        service = AzureMetadataService()
+        condition = service.get_coding_condition(False, "ai-assisted")
+        
+        assert condition == "vibe"  # Default fallback

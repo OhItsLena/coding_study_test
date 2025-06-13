@@ -10,43 +10,51 @@ from models.participant_manager import ParticipantManager
 class TestParticipantManager:
     """Test cases for ParticipantManager class."""
     
-    def test_get_coding_condition_known_participants(self):
-        """Test getting coding condition for known participant patterns."""
+    def test_get_coding_condition_development_mode(self):
+        """Test getting coding condition in development mode."""
         manager = ParticipantManager()
         
-        # Test specific participants (based on actual hash behavior)
-        test_cases = [
-            ("participant-001", "ai-assisted"),
-            ("participant-002", "vibe"),
-            ("participant-003", "ai-assisted"), 
-            ("participant-004", "vibe"),
-            ("test-participant-001", "vibe"),  # Fixed based on actual behavior
-            ("test-participant-002", "vibe")
-        ]
+        # Test with default dev_coding_condition
+        condition = manager.get_coding_condition("test-participant", development_mode=True)
+        assert condition == "vibe"
         
-        for participant_id, expected in test_cases:
-            condition = manager.get_coding_condition(participant_id)
-            assert condition == expected, f"Expected {expected} for {participant_id}, got {condition}"
+        # Test with explicit dev_coding_condition
+        condition = manager.get_coding_condition("test-participant", development_mode=True, dev_coding_condition="ai-assisted")
+        assert condition == "ai-assisted"
     
-    def test_get_coding_condition_study_participant_default(self):
-        """Test default condition for Study Participant."""
-        manager = ParticipantManager()
+    @patch('models.participant_manager.AzureMetadataService.get_coding_condition')
+    def test_get_coding_condition_production_success(self, mock_get_coding_condition):
+        """Test getting coding condition from Azure metadata successfully."""
+        mock_get_coding_condition.return_value = "ai-assisted"
         
-        condition = manager.get_coding_condition("Study Participant")
-        assert condition == "vibe", f"Expected vibe for Study Participant, got {condition}"
+        manager = ParticipantManager()
+        condition = manager.get_coding_condition("test-participant", development_mode=False)
+        
+        assert condition == "ai-assisted"
+        mock_get_coding_condition.assert_called_once_with(False, "vibe")
+    
+    @patch('models.participant_manager.AzureMetadataService.get_coding_condition')
+    def test_get_coding_condition_production_fallback(self, mock_get_coding_condition):
+        """Test getting coding condition with fallback to default."""
+        mock_get_coding_condition.return_value = "vibe"
+        
+        manager = ParticipantManager()
+        condition = manager.get_coding_condition("test-participant", development_mode=False)
+        
+        assert condition == "vibe"
+        mock_get_coding_condition.assert_called_once_with(False, "vibe")
     
     def test_get_coding_condition_valid_values(self):
         """Test that coding condition returns only valid values."""
         manager = ParticipantManager()
         
-        test_participants = [
-            "participant-001", "participant-002", "test-123", 
-            "dev-participant", "Study Participant", ""
-        ]
+        # Test development mode with different conditions
+        test_conditions = ["vibe", "ai-assisted"]
         
-        for participant_id in test_participants:
-            condition = manager.get_coding_condition(participant_id)
-            assert condition in ["vibe", "ai-assisted"], f"Invalid condition {condition} for {participant_id}"
+        for dev_condition in test_conditions:
+            condition = manager.get_coding_condition("test-participant", development_mode=True, dev_coding_condition=dev_condition)
+            assert condition in ["vibe", "ai-assisted"], f"Invalid condition {condition}"
+            assert condition == dev_condition, f"Expected {dev_condition}, got {condition}"
     
     def test_get_coding_condition_consistent(self):
         """Test that coding condition is consistent for the same participant."""

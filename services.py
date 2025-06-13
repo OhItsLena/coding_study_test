@@ -50,9 +50,9 @@ def update_session_data(session, study_stage, current_task=None, completed_tasks
 
 
 # Participant Management Functions
-def get_coding_condition(participant_id):
-    """Determine the coding condition based on participant ID."""
-    return _participant_manager.get_coding_condition(participant_id)
+def get_coding_condition(participant_id, development_mode=False, dev_coding_condition="vibe"):
+    """Determine the coding condition from Azure VM tags."""
+    return _participant_manager.get_coding_condition(participant_id, development_mode, dev_coding_condition)
 
 
 # Azure Service Functions

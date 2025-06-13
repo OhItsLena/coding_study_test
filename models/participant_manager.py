@@ -5,6 +5,7 @@ Handles participant identification, coding conditions, and study stages.
 
 import hashlib
 from typing import Optional
+from .azure_service import AzureMetadataService
 
 
 class ParticipantManager:
@@ -13,21 +14,18 @@ class ParticipantManager:
     """
     
     @staticmethod
-    def get_coding_condition(participant_id: str) -> str:
+    def get_coding_condition(participant_id: str, development_mode: bool = False, 
+                           dev_coding_condition: str = "vibe") -> str:
         """
-        Determine the coding condition based on participant ID.
+        Determine the coding condition from Azure VM tags.
         
         Args:
             participant_id: The participant's unique identifier
+            development_mode: Whether running in development mode
+            dev_coding_condition: Coding condition to use in development mode
             
         Returns:
             Either 'vibe' for vibe coding or 'ai-assisted' for AI-assisted coding
         """
-        # Simple hash-based assignment for consistent condition per participant
-        # This ensures the same participant always gets the same condition
-        if participant_id == "Study Participant":
-            return "vibe"  # Default for unknown participants
-        
-        # Use hash of participant ID to assign condition
-        hash_value = int(hashlib.md5(participant_id.encode()).hexdigest(), 16)
-        return "vibe" if hash_value % 2 == 0 else "ai-assisted"
+        # Get coding condition from Azure VM tags
+        return AzureMetadataService.get_coding_condition(development_mode, dev_coding_condition)

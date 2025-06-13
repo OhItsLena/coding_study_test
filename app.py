@@ -22,6 +22,7 @@ app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'false').lower() == 'true'
 DEV_PARTICIPANT_ID = os.getenv('DEV_PARTICIPANT_ID', 'dev-participant-001')
 DEV_STAGE = int(os.getenv('DEV_STAGE', '1'))
+DEV_CODING_CONDITION = os.getenv('DEV_CODING_CONDITION', 'vibe')
 
 # GitHub authentication configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
@@ -232,7 +233,7 @@ def tutorial():
     
     # Log route visit if this is the first time
     if should_log_route(session, 'tutorial', study_stage):
-        coding_condition = get_coding_condition(participant_id)
+        coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
         session_data = {
             'tutorial_accessed': True,
             'coding_condition': coding_condition
@@ -253,7 +254,7 @@ def tutorial():
     if study_stage == 2:
         return redirect(url_for('welcome_back'))
     
-    coding_condition = get_coding_condition(participant_id)
+    coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
     return render_template('tutorial.jinja', 
                          participant_id=participant_id,
                          study_stage=study_stage,
@@ -263,7 +264,7 @@ def tutorial():
 def welcome_back():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
-    coding_condition = get_coding_condition(participant_id)
+    coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
     
     # Check and clone repository when stage 2 user starts (first time accessing this route)
     if should_log_route(session, 'welcome_back', study_stage):
@@ -312,7 +313,7 @@ def welcome_back():
 def task():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
-    coding_condition = get_coding_condition(participant_id)
+    coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
     
     # Set up repository for the current stage (ensure correct branch)
     setup_success = setup_repository_for_stage(participant_id, study_stage, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
