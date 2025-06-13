@@ -6,8 +6,9 @@ Handles Git operations, repository setup, VS Code integration, and file operatio
 import os
 import shutil
 import subprocess
+import platform
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from .github_service import GitHubService
 
@@ -25,6 +26,25 @@ class RepositoryManager:
             github_service: GitHubService instance for GitHub operations
         """
         self.github_service = github_service
+    
+    def _get_subprocess_kwargs(self) -> Dict[str, Any]:
+        """
+        Get subprocess keyword arguments with platform-specific settings.
+        On Windows, prevents terminal windows from flickering by setting CREATE_NO_WINDOW flag.
+        
+        Returns:
+            Dictionary of keyword arguments for subprocess.run()
+        """
+        kwargs = {
+            'capture_output': True,
+            'text': True
+        }
+        
+        # On Windows, prevent terminal window from showing
+        if platform.system() == "Windows":
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        
+        return kwargs
     
     def get_repository_path(self, participant_id: str, development_mode: bool) -> str:
         """
@@ -106,9 +126,11 @@ class RepositoryManager:
             
             # Clone the repository
             print(f"Cloning repository from {repo_url} to {repo_path}")
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 60
             result = subprocess.run([
                 'git', 'clone', repo_url, repo_path
-            ], capture_output=True, text=True, timeout=60)
+            ], **kwargs)
             
             if result.returncode == 0:
                 print(f"Successfully cloned repository to: {repo_path}")
@@ -140,27 +162,35 @@ class RepositoryManager:
             os.chdir(repo_path)
             
             # Check if user.name is set
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 5
             result = subprocess.run([
                 'git', 'config', 'user.name'
-            ], capture_output=True, text=True, timeout=5)
+            ], **kwargs)
             
             if result.returncode != 0 or not result.stdout.strip():
                 # Set user name
+                kwargs = self._get_subprocess_kwargs()
+                kwargs['timeout'] = 5
                 subprocess.run([
                     'git', 'config', 'user.name', f'{participant_id}'
-                ], capture_output=True, text=True, timeout=5)
+                ], **kwargs)
                 print(f"Set git user.name for participant {participant_id}")
             
             # Check if user.email is set
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 5
             result = subprocess.run([
                 'git', 'config', 'user.email'
-            ], capture_output=True, text=True, timeout=5)
+            ], **kwargs)
             
             if result.returncode != 0 or not result.stdout.strip():
                 # Set user email
+                kwargs = self._get_subprocess_kwargs()
+                kwargs['timeout'] = 5
                 subprocess.run([
                     'git', 'config', 'user.email', f'{participant_id}@study.local'
-                ], capture_output=True, text=True, timeout=5)
+                ], **kwargs)
                 print(f"Set git user.email for participant {participant_id}")
                 
             return True
@@ -193,18 +223,22 @@ class RepositoryManager:
             branch_name = f"stage-{study_stage}"
             
             # Check if the branch already exists locally
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 10
             result = subprocess.run([
                 'git', 'branch', '--list', branch_name
-            ], capture_output=True, text=True, timeout=10)
+            ], **kwargs)
             
             branch_exists_locally = branch_name in result.stdout
             
             if branch_exists_locally:
                 # Branch exists locally - just switch to it
                 print(f"Switching to existing local branch: {branch_name}")
+                kwargs = self._get_subprocess_kwargs()
+                kwargs['timeout'] = 10
                 result = subprocess.run([
                     'git', 'checkout', branch_name
-                ], capture_output=True, text=True, timeout=10)
+                ], **kwargs)
                 
                 if result.returncode != 0:
                     print(f"Failed to checkout local branch {branch_name}. Error: {result.stderr}")
@@ -212,9 +246,11 @@ class RepositoryManager:
             else:
                 # Branch doesn't exist - create it
                 print(f"Creating new branch: {branch_name}")
+                kwargs = self._get_subprocess_kwargs()
+                kwargs['timeout'] = 10
                 result = subprocess.run([
                     'git', 'checkout', '-b', branch_name
-                ], capture_output=True, text=True, timeout=10)
+                ], **kwargs)
                 
                 if result.returncode != 0:
                     print(f"Failed to create branch {branch_name}. Error: {result.stderr}")
@@ -311,9 +347,11 @@ class RepositoryManager:
                 return False
             
             # Add all changes
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 10
             result = subprocess.run([
                 'git', 'add', '.'
-            ], capture_output=True, text=True, timeout=10)
+            ], **kwargs)
             
             if result.returncode != 0:
                 print(f"Failed to add changes. Error: {result.stderr}")
@@ -324,9 +362,11 @@ class RepositoryManager:
             full_commit_message = f"[Stage {study_stage}] {commit_message} - {timestamp}"
             
             # Commit changes
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 10
             result = subprocess.run([
                 'git', 'commit', '-m', full_commit_message
-            ], capture_output=True, text=True, timeout=10)
+            ], **kwargs)
             
             if result.returncode != 0:
                 print(f"Failed to commit changes. Error: {result.stderr}")
@@ -343,7 +383,7 @@ class RepositoryManager:
                 # Update the origin URL to use authentication
                 result = subprocess.run([
                     'git', 'remote', 'set-url', 'origin', authenticated_url
-                ], capture_output=True, text=True, timeout=10)
+                ], **self._get_subprocess_kwargs(), timeout=10)
                 
                 if result.returncode != 0:
                     print(f"Warning: Failed to set authenticated remote URL. Error: {result.stderr}")
@@ -352,7 +392,7 @@ class RepositoryManager:
                 branch_name = f"stage-{study_stage}"
                 result = subprocess.run([
                     'git', 'push', 'origin', branch_name
-                ], capture_output=True, text=True, timeout=30)
+                ], **self._get_subprocess_kwargs(), timeout=30)
                 
                 if result.returncode == 0:
                     print(f"Successfully pushed changes to remote repository branch: {branch_name}")
@@ -422,7 +462,7 @@ class RepositoryManager:
                 # Update the origin URL to use authentication
                 result = subprocess.run([
                     'git', 'remote', 'set-url', 'origin', authenticated_url
-                ], capture_output=True, text=True, timeout=10)
+                ], **self._get_subprocess_kwargs(), timeout=10)
                 
                 if result.returncode != 0:
                     print(f"Warning: Failed to set authenticated remote URL. Error: {result.stderr}")
@@ -431,7 +471,7 @@ class RepositoryManager:
             branch_name = f"stage-{study_stage}"
             result = subprocess.run([
                 'git', 'push', 'origin', branch_name
-            ], capture_output=True, text=True, timeout=30)
+            ], **self._get_subprocess_kwargs(), timeout=30)
             
             if result.returncode == 0:
                 print(f"Successfully pushed changes to remote repository branch: {branch_name} for participant {participant_id}")
@@ -503,9 +543,11 @@ class VSCodeManager:
             print(f"Opening VS Code with repository: {repo_path}")
             
             # Use 'code' command to open VS Code with the repository folder
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 10
             result = subprocess.run([
                 'code', repo_path
-            ], capture_output=True, text=True, timeout=10)
+            ], **kwargs)
             
             if result.returncode == 0:
                 print(f"Successfully opened VS Code with repository: {repo_path}")
@@ -514,9 +556,11 @@ class VSCodeManager:
                 print(f"Failed to open VS Code. Error: {result.stderr}")
                 # Try alternative method for macOS
                 try:
+                    kwargs = self._get_subprocess_kwargs()
+                    kwargs['timeout'] = 10
                     result = subprocess.run([
                         'open', '-a', 'Visual Studio Code', repo_path
-                    ], capture_output=True, text=True, timeout=10)
+                    ], **kwargs)
                     
                     if result.returncode == 0:
                         print(f"Successfully opened VS Code using 'open' command: {repo_path}")

@@ -29,6 +29,25 @@ class StudyLogger:
         """
         self.github_service = github_service
     
+    def _get_subprocess_kwargs(self) -> Dict[str, Any]:
+        """
+        Get subprocess keyword arguments with platform-specific settings.
+        On Windows, prevents terminal windows from flickering by setting CREATE_NO_WINDOW flag.
+        
+        Returns:
+            Dictionary of keyword arguments for subprocess.run()
+        """
+        kwargs = {
+            'capture_output': True,
+            'text': True
+        }
+        
+        # On Windows, prevent terminal window from showing
+        if platform.system() == "Windows":
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        
+        return kwargs
+    
     def get_logs_directory_path(self, participant_id: str, development_mode: bool) -> str:
         """
         Get the path to the logs directory (separate from the main coding repository).
@@ -83,17 +102,21 @@ class StudyLogger:
                 # Initialize as git repository
                 os.chdir(logs_path)
                 
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 10
                 result = subprocess.run([
                     'git', 'init'
-                ], capture_output=True, text=True, timeout=10)
+                ], **kwargs)
                 
                 if result.returncode != 0:
                     print(f"Failed to initialize git repository in logs directory. Error: {result.stderr}")
                     return False
                 
                 # Set up git config (basic config for logging)
-                subprocess.run(['git', 'config', 'user.name', f'{participant_id}'], capture_output=True, text=True, timeout=5)
-                subprocess.run(['git', 'config', 'user.email', f'{participant_id}@study.local'], capture_output=True, text=True, timeout=5)
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 5
+                subprocess.run(['git', 'config', 'user.name', f'{participant_id}'], **kwargs)
+                subprocess.run(['git', 'config', 'user.email', f'{participant_id}@study.local'], **kwargs)
                 
                 # Create initial README
                 readme_content = f"# Study Logs for Participant {participant_id}\n\nThis repository contains anonymized logs for study analysis.\n"
@@ -102,8 +125,10 @@ class StudyLogger:
                     f.write(readme_content)
                 
                 # Initial commit
-                subprocess.run(['git', 'add', 'README.md'], capture_output=True, text=True, timeout=5)
-                subprocess.run(['git', 'commit', '-m', 'Initial commit for logging repository'], capture_output=True, text=True, timeout=5)
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 5
+                subprocess.run(['git', 'add', 'README.md'], **kwargs)
+                subprocess.run(['git', 'commit', '-m', 'Initial commit for logging repository'], **kwargs)
                 
                 print(f"Initialized logging repository at: {logs_path}")
             
@@ -111,15 +136,19 @@ class StudyLogger:
             os.chdir(logs_path)
             
             # Check if logging branch exists
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 10
             result = subprocess.run([
                 'git', 'branch', '--list', 'logging'
-            ], capture_output=True, text=True, timeout=10)
+            ], **kwargs)
             
             if 'logging' not in result.stdout:
                 # Create logging branch
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 10
                 result = subprocess.run([
                     'git', 'checkout', '-b', 'logging'
-                ], capture_output=True, text=True, timeout=10)
+                ], **kwargs)
                 
                 if result.returncode != 0:
                     print(f"Failed to create logging branch. Error: {result.stderr}")
@@ -128,9 +157,11 @@ class StudyLogger:
                 print("Created logging branch")
             else:
                 # Switch to logging branch
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 10
                 result = subprocess.run([
                     'git', 'checkout', 'logging'
-                ], capture_output=True, text=True, timeout=10)
+                ], **kwargs)
                 
                 if result.returncode != 0:
                     print(f"Failed to checkout logging branch. Error: {result.stderr}")
@@ -180,7 +211,9 @@ class StudyLogger:
             os.chdir(logs_path)
             
             # Ensure we're on logging branch
-            subprocess.run(['git', 'checkout', 'logging'], capture_output=True, text=True, timeout=5)
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 5
+            subprocess.run(['git', 'checkout', 'logging'], **kwargs)
             
             # Load existing logs or create new structure
             logs_data = {'visits': []}
@@ -222,10 +255,13 @@ class StudyLogger:
                 json.dump(logs_data, f, indent=2, ensure_ascii=False)
             
             # Commit the log entry
-            subprocess.run(['git', 'add', 'session_log.json'], capture_output=True, text=True, timeout=5)
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 5
+            subprocess.run(['git', 'add', 'session_log.json'], **kwargs)
             
             commit_message = f"Log route visit: {route_name} (stage {study_stage}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
-            result = subprocess.run(['git', 'commit', '-m', commit_message], capture_output=True, text=True, timeout=10)
+            kwargs["timeout"] = 10
+            result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
             
             if result.returncode == 0:
                 print(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}")
@@ -274,17 +310,22 @@ class StudyLogger:
             authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
             
             # Check if remote exists
-            result = subprocess.run(['git', 'remote'], capture_output=True, text=True, timeout=5)
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 5
+            result = subprocess.run(['git', 'remote'], **kwargs)
             
             if 'origin' not in result.stdout:
                 # Add remote
-                subprocess.run(['git', 'remote', 'add', 'origin', authenticated_url], capture_output=True, text=True, timeout=10)
+                kwargs["timeout"] = 10
+                subprocess.run(['git', 'remote', 'add', 'origin', authenticated_url], **kwargs)
             else:
                 # Update remote URL
-                subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], capture_output=True, text=True, timeout=10)
+                kwargs["timeout"] = 10
+                subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
             
             # Push logging branch
-            result = subprocess.run(['git', 'push', 'origin', 'logging'], capture_output=True, text=True, timeout=30)
+            kwargs["timeout"] = 30
+            result = subprocess.run(['git', 'push', 'origin', 'logging'], **kwargs)
             
             if result.returncode == 0:
                 print(f"Successfully pushed logs to remote for participant {participant_id}")
@@ -334,7 +375,9 @@ class StudyLogger:
             os.chdir(logs_path)
             
             # Ensure we're on logging branch
-            subprocess.run(['git', 'checkout', 'logging'], capture_output=True, text=True, timeout=5)
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 5
+            subprocess.run(['git', 'checkout', 'logging'], **kwargs)
             
             # Load existing transitions or create new structure
             transitions_data = {'transitions': []}
@@ -374,10 +417,13 @@ class StudyLogger:
                 json.dump(transitions_data, f, indent=2, ensure_ascii=False)
             
             # Commit the transition entry
-            subprocess.run(['git', 'add', 'stage_transitions.json'], capture_output=True, text=True, timeout=5)
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 5
+            subprocess.run(['git', 'add', 'stage_transitions.json'], **kwargs)
             
             commit_message = f"Mark stage transition: {transition_key} at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
-            result = subprocess.run(['git', 'commit', '-m', commit_message], capture_output=True, text=True, timeout=10)
+            kwargs["timeout"] = 10
+            result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
             
             if result.returncode == 0:
                 print(f"Successfully logged stage transition: {transition_key} for participant {participant_id}")
@@ -490,7 +536,9 @@ class StudyLogger:
             os.chdir(logs_path)
             
             # Ensure we're on logging branch
-            subprocess.run(['git', 'checkout', 'logging'], capture_output=True, text=True, timeout=5)
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 5
+            subprocess.run(['git', 'checkout', 'logging'], **kwargs)
             
             # Create vscode-storage directory if it doesn't exist
             vscode_logs_dir = os.path.join(logs_path, 'vscode-storage')
@@ -518,11 +566,14 @@ class StudyLogger:
                             continue
             
             # Add files to git
-            subprocess.run(['git', 'add', 'vscode-storage/'], capture_output=True, text=True, timeout=10)
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 10
+            subprocess.run(['git', 'add', 'vscode-storage/'], **kwargs)
             
             # Commit the VS Code workspace storage
             commit_message = f"Save VS Code workspace storage for stage {study_stage} at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
-            result = subprocess.run(['git', 'commit', '-m', commit_message], capture_output=True, text=True, timeout=15)
+            kwargs["timeout"] = 15
+            result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
             
             if result.returncode == 0:
                 print(f"Successfully saved VS Code workspace storage for stage {study_stage}")
