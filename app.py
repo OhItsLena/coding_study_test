@@ -9,7 +9,8 @@ from services import (
     setup_repository_for_stage, log_route_visit, should_log_route, mark_route_as_logged,
     mark_stage_transition, get_async_github_stats, get_async_github_queue_size,
     test_github_connectivity_async, stop_async_github_service, wait_for_async_github_completion,
-    save_vscode_workspace_storage, save_vscode_workspace_storage_async
+    save_vscode_workspace_storage, save_vscode_workspace_storage_async,
+    start_session_recording, stop_session_recording, is_recording_active
 )
 
 # Load environment variables from .env file
@@ -110,6 +111,9 @@ def debug_session():
     # Prepare session items for template
     session_items = list(session.items())
     
+    # Check recording status
+    recording_active = is_recording_active()
+    
     return render_template('debug_session.jinja',
                          current_time=time.strftime('%Y-%m-%d %H:%M:%S'),
                          participant_id=participant_id,
@@ -122,7 +126,8 @@ def debug_session():
                          current_task=current_task,
                          completed_tasks=completed_tasks,
                          vscode_status=vscode_status,
-                         session_items=session_items)
+                         session_items=session_items,
+                         recording_active=recording_active)
 
 @app.route('/background-questionnaire')
 def background_questionnaire():
@@ -187,6 +192,16 @@ def ux_questionnaire():
         mark_route_as_logged(session, 'ux_questionnaire', study_stage)
     
     ux_survey_url = os.getenv('UX_SURVEY_URL', '#')
+    
+    # Stop screen recording when the study session ends
+    if is_recording_active():
+        recording_stopped = stop_session_recording()
+        if recording_stopped:
+            print(f"Screen recording stopped for participant {participant_id}, stage {study_stage}")
+        else:
+            print(f"Failed to stop screen recording for participant {participant_id}, stage {study_stage}")
+    else:
+        print(f"No active screen recording to stop for participant {participant_id}, stage {study_stage}")
     
     # Commit any remaining code changes before leaving for the survey
     commit_message = "Session ended - proceeding to UX questionnaire"
@@ -354,6 +369,13 @@ def task():
         timer_start = time.time()
         update_session_data(session, study_stage, timer_start=timer_start)
         
+        # Start screen recording when the coding session begins
+        recording_started = start_session_recording(participant_id, study_stage, DEVELOPMENT_MODE)
+        if recording_started:
+            print(f"Screen recording started for participant {participant_id}, stage {study_stage}")
+        else:
+            print(f"Failed to start screen recording for participant {participant_id}, stage {study_stage}")
+        
         # Make an initial commit to mark the start of this coding session
         commit_message = f"Started coding session - Condition: {coding_condition}"
         commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, async_mode=ASYNC_GITHUB_MODE)
@@ -497,6 +519,14 @@ def timer_expired():
     # Mark timer as finished
     update_session_data(session, study_stage, timer_finished=True)
     
+    # Stop screen recording when timer expires
+    if is_recording_active():
+        recording_stopped = stop_session_recording()
+        if recording_stopped:
+            print(f"Screen recording stopped due to timer expiration for participant {participant_id}, stage {study_stage}")
+        else:
+            print(f"Failed to stop screen recording on timer expiration for participant {participant_id}, stage {study_stage}")
+    
     # Log timer expiration event
     session_data = get_session_data(session, study_stage)
     log_session_data = {
@@ -570,6 +600,41 @@ def debug_async_github():
                          stats=stats,
                          queue_size=queue_size)
 
+@app.route('/debug-recording')
+def debug_recording():
+    """Debug route for manually controlling screen recording during development"""
+    if not DEVELOPMENT_MODE:
+        return "Only available in development mode", 403
+    
+    action = request.args.get('action', 'status')
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    if action == 'start':
+        result = start_session_recording(participant_id, study_stage, DEVELOPMENT_MODE)
+        message = f"Recording started: {result}"
+    elif action == 'stop':
+        result = stop_session_recording()
+        message = f"Recording stopped: {result}"
+    else:
+        message = "Available actions: ?action=start or ?action=stop"
+    
+    recording_active = is_recording_active()
+    
+    return f"""
+    <h2>🎥 Screen Recording Debug</h2>
+    <p><strong>Participant:</strong> {participant_id}</p>
+    <p><strong>Stage:</strong> {study_stage}</p>
+    <p><strong>Recording Active:</strong> {'✅ YES' if recording_active else '❌ NO'}</p>
+    <p><strong>Action Result:</strong> {message}</p>
+    <hr>
+    <a href="/debug-recording?action=start">Start Recording</a> | 
+    <a href="/debug-recording?action=stop">Stop Recording</a> | 
+    <a href="/debug-recording">Status Only</a>
+    <br><br>
+    <a href="/debug-session">← Back to Debug Session</a>
+    """
+
 if __name__ == '__main__':
     # Print mode information
     if DEVELOPMENT_MODE:
@@ -609,9 +674,17 @@ if __name__ == '__main__':
     # Repository will be cloned when user starts the session
     print("\nRepository will be cloned when user clicks 'Start Session'")
     
-    # Set up graceful shutdown for async service
+    # Set up graceful shutdown for async service and screen recording
+    def cleanup_on_exit():
+        # Stop any active screen recording
+        if is_recording_active():
+            print("Stopping active screen recording on app shutdown...")
+            stop_session_recording()
+        # Stop async GitHub service
+        stop_async_github_service()
+    
     import atexit
-    atexit.register(stop_async_github_service)
-    print("Async GitHub service shutdown handler registered")
+    atexit.register(cleanup_on_exit)
+    print("Async GitHub service and screen recording shutdown handlers registered")
 
     app.run(host='127.0.0.1', port=8085, debug=True)

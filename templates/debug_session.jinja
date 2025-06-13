@@ -24,6 +24,13 @@
     <p><strong>Participant ID:</strong> {{ participant_id }}</p>
     <p><strong>Current Study Stage:</strong> {{ study_stage }}</p>
     <p><strong>Development Mode:</strong> {{ development_mode }}</p>
+    <p><strong>🎥 Screen Recording Active:</strong> 
+        {% if recording_active %}
+            <span style="color: green; font-weight: bold;">✅ YES</span>
+        {% else %}
+            <span style="color: red; font-weight: bold;">❌ NO</span>
+        {% endif %}
+    </p>
     
     <div class="section actions">
         <h3>🔧 Quick Actions</h3>

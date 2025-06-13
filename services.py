@@ -225,6 +225,22 @@ def mark_route_as_logged(session, route_name, study_stage):
     return _session_tracker.mark_route_as_logged(session, route_name, study_stage)
 
 
+# Screen Recording Functions
+def start_session_recording(participant_id, study_stage, development_mode):
+    """Start screen recording for the study session."""
+    return _study_logger.start_session_recording(participant_id, study_stage, development_mode)
+
+
+def stop_session_recording():
+    """Stop the current session recording."""
+    return _study_logger.stop_session_recording()
+
+
+def is_recording_active():
+    """Check if a recording is currently active."""
+    return _study_logger.is_recording_active()
+
+
 # Async GitHub Service Management Functions
 def get_async_github_stats():
     """Get statistics about the async GitHub operation queue."""

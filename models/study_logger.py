@@ -9,10 +9,198 @@ import subprocess
 import platform
 import shutil
 import zipfile
+import signal
+import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 from .github_service import GitHubService
+
+
+class ScreenRecorder:
+    """
+    Handles screen recording using FFmpeg.
+    """
+    
+    def __init__(self):
+        """Initialize the screen recorder."""
+        self.recording_process = None
+        self.recording_file_path = None
+    
+    def start_recording(self, participant_id: str, study_stage: int, logs_directory: str) -> bool:
+        """
+        Start screen recording using FFmpeg.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            study_stage: The current study stage (1 or 2)
+            logs_directory: Directory where the recording should be saved
+            
+        Returns:
+            True if recording started successfully, False otherwise
+        """
+        if self.recording_process is not None:
+            print("Screen recording is already in progress")
+            return False
+        
+        try:
+            # Create recordings directory if it doesn't exist
+            recordings_dir = os.path.join(logs_directory, "recordings")
+            os.makedirs(recordings_dir, exist_ok=True)
+            
+            # Generate recording filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            recording_filename = f"screen_recording_{participant_id}_stage{study_stage}_{timestamp}.mp4"
+            self.recording_file_path = os.path.join(recordings_dir, recording_filename)
+            
+            # FFmpeg command for screen recording (platform-specific)
+            if platform.system() == "Darwin":  # macOS
+                # Use avfoundation for macOS screen capture
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-f", "avfoundation",
+                    "-i", "3:",  # Primary screen (device 3), no audio
+                    "-r", "15",   # Output framerate 15 fps
+                    "-vcodec", "libx264",
+                    "-preset", "ultrafast",
+                    "-crf", "28",
+                    "-pix_fmt", "yuv420p",  # Ensure compatibility
+                    "-y",  # Overwrite output file
+                    self.recording_file_path
+                ]
+            elif platform.system() == "Windows":
+                # Use gdigrab for Windows screen capture
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-f", "gdigrab",
+                    "-framerate", "15",
+                    "-i", "desktop",
+                    "-vcodec", "libx264",
+                    "-preset", "ultrafast",
+                    "-crf", "28",
+                    "-pix_fmt", "yuv420p",  # Ensure compatibility
+                    "-y",  # Overwrite output file
+                    self.recording_file_path
+                ]
+            else:  # Linux
+                # Use x11grab for Linux screen capture
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-f", "x11grab",
+                    "-framerate", "15",
+                    "-i", ":0.0",  # Display :0.0
+                    "-vcodec", "libx264",
+                    "-preset", "ultrafast",
+                    "-crf", "28",
+                    "-pix_fmt", "yuv420p",  # Ensure compatibility
+                    "-y",  # Overwrite output file
+                    self.recording_file_path
+                ]
+            
+            # Start the recording process
+            print(f"Starting screen recording: {recording_filename}")
+            print(f"FFmpeg command: {' '.join(ffmpeg_cmd)}")
+            
+            self.recording_process = subprocess.Popen(
+                ffmpeg_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                preexec_fn=os.setsid if platform.system() != "Windows" else None,
+                creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
+            )
+            
+            # Give FFmpeg a moment to start and check if it's running
+            time.sleep(2)
+            
+            if self.recording_process.poll() is not None:
+                # Process has already terminated, check for errors
+                stdout, stderr = self.recording_process.communicate()
+                print(f"FFmpeg failed to start. Error: {stderr.decode()}")
+                self.recording_process = None
+                self.recording_file_path = None
+                return False
+            
+            print(f"Screen recording started successfully for participant {participant_id}, stage {study_stage}")
+            return True
+            
+        except FileNotFoundError:
+            print("FFmpeg not found. Please install FFmpeg and make sure it's in your PATH.")
+            self.recording_process = None
+            self.recording_file_path = None
+            return False
+        except Exception as e:
+            print(f"Failed to start screen recording: {e}")
+            self.recording_process = None
+            self.recording_file_path = None
+            return False
+    
+    def stop_recording(self) -> bool:
+        """
+        Stop the current screen recording.
+        
+        Returns:
+            True if recording stopped successfully, False otherwise
+        """
+        if self.recording_process is None:
+            print("No screen recording in progress")
+            return False
+        
+        try:
+            print("Stopping screen recording...")
+            
+            if platform.system() == "Windows":
+                # On Windows, terminate the process
+                self.recording_process.terminate()
+            else:
+                # On Unix-like systems, send SIGTERM to the process group
+                os.killpg(os.getpgid(self.recording_process.pid), signal.SIGTERM)
+            
+            # Wait for the process to terminate
+            self.recording_process.wait(timeout=10)
+            
+            print(f"Screen recording stopped successfully. File saved: {self.recording_file_path}")
+            
+            # Reset the recording state
+            self.recording_process = None
+            recording_file = self.recording_file_path
+            self.recording_file_path = None
+            
+            return True
+            
+        except subprocess.TimeoutExpired:
+            print("Recording process did not terminate gracefully, forcing termination")
+            if platform.system() == "Windows":
+                self.recording_process.kill()
+            else:
+                os.killpg(os.getpgid(self.recording_process.pid), signal.SIGKILL)
+            self.recording_process = None
+            self.recording_file_path = None
+            return False
+        except Exception as e:
+            print(f"Failed to stop screen recording: {e}")
+            self.recording_process = None
+            self.recording_file_path = None
+            return False
+    
+    def is_recording(self) -> bool:
+        """
+        Check if a recording is currently in progress.
+        
+        Returns:
+            True if recording is active, False otherwise
+        """
+        if self.recording_process is None:
+            return False
+        
+        # Check if the process is still running
+        poll_result = self.recording_process.poll()
+        if poll_result is not None:
+            # Process has terminated
+            self.recording_process = None
+            self.recording_file_path = None
+            return False
+        
+        return True
 
 
 class StudyLogger:
@@ -28,7 +216,41 @@ class StudyLogger:
             github_service: GitHubService instance for GitHub operations
         """
         self.github_service = github_service
+        self.screen_recorder = ScreenRecorder()
     
+    def start_session_recording(self, participant_id: str, study_stage: int, development_mode: bool) -> bool:
+        """
+        Start screen recording for the study session.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            study_stage: The current study stage (1 or 2)
+            development_mode: Whether running in development mode
+            
+        Returns:
+            True if recording started successfully, False otherwise
+        """
+        logs_directory = self.get_logs_directory_path(participant_id, development_mode)
+        return self.screen_recorder.start_recording(participant_id, study_stage, logs_directory)
+    
+    def stop_session_recording(self) -> bool:
+        """
+        Stop the current session recording.
+        
+        Returns:
+            True if recording stopped successfully, False otherwise
+        """
+        return self.screen_recorder.stop_recording()
+    
+    def is_recording_active(self) -> bool:
+        """
+        Check if a recording is currently active.
+        
+        Returns:
+            True if recording is active, False otherwise
+        """
+        return self.screen_recorder.is_recording()
+
     def _get_subprocess_kwargs(self) -> Dict[str, Any]:
         """
         Get subprocess keyword arguments with platform-specific settings.
