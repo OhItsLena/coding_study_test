@@ -128,6 +128,11 @@ def background_questionnaire():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     
+    # Check and clone repository when user starts the session (first time accessing this route)
+    if should_log_route(session, 'background_questionnaire', study_stage):
+        print(f"\nUser started session - checking and cloning repository for participant: {participant_id}")
+        check_and_clone_repository(participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
+    
     # Log route visit if this is the first time
     if should_log_route(session, 'background_questionnaire', study_stage):
         log_route_visit(
@@ -259,6 +264,11 @@ def welcome_back():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     coding_condition = get_coding_condition(participant_id)
+    
+    # Check and clone repository when stage 2 user starts (first time accessing this route)
+    if should_log_route(session, 'welcome_back', study_stage):
+        print(f"\nStage 2 user started session - checking and cloning repository for participant: {participant_id}")
+        check_and_clone_repository(participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     
     # Log route visit if this is the first time
     if should_log_route(session, 'welcome_back', study_stage):
@@ -570,11 +580,12 @@ if __name__ == '__main__':
     else:
         print("Running in production mode")
     
-    # Get participant ID and check/clone repository on startup
+    # Get participant ID for startup information (repository cloned when session starts)
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     print(f"Starting server for participant: {participant_id}")
-    print(f"Study stage: {study_stage} ({'Repository not found' if study_stage == 1 else 'Repository exists'})")
+    print(f"Study stage: {study_stage} ({'Stage 1 - First time' if study_stage == 1 else 'Stage 2 - Returning participant'})")
+    print("Note: Repository will be cloned when user clicks 'Start Session'")
     
     # Test GitHub connectivity
     print("\nTesting GitHub connectivity...")
@@ -594,9 +605,8 @@ if __name__ == '__main__':
         if not github_available:
             print("Warning: GitHub repository may not be accessible")
     
-    # Check and clone repository if needed
-    print("\nChecking repository...")
-    check_and_clone_repository(participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
+    # Repository will be cloned when user starts the session
+    print("\nRepository will be cloned when user clicks 'Start Session'")
     
     # Set up graceful shutdown for async service
     import atexit
