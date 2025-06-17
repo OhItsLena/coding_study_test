@@ -5,7 +5,7 @@
 {% block additional_styles %}
 .completion-message {
     font-size: 1.1em;
-    color: #8A2BE2;
+    color: #00883A;
     margin-bottom: 20px;
     font-weight: bold;
 }
@@ -16,17 +16,21 @@
 
 {% block content %}
 <div class="survey-card">
-    <h1>Post-Task UX Survey</h1>
+    <h1>Post Coding Survey</h1>
     <div class="participant-id">Participant ID: {{ participant_id }}</div>
     
-    <div class="completion-message">
-        Congratulations! You have completed the coding task.
+    <div class="survey-content">
+        <p class="completion-message">Thank you for completing the coding task!</p>
+
+        <p>Before you finish this session, we'd like to hear about your experience during the development process.</p>
+        
+        <p>This short questionnaire will take approximately <strong>3–5 minutes</strong> to complete. It helps us understand how you approached the task, your interaction with the tools, and your overall impressions. There are <strong>no right or wrong answers</strong>, and your responses will be kept confidential and used solely for research purposes.</p>
+        
+        <p>Please complete the questionnaire before leaving.</p>
     </div>
     
-    <p>Please complete this final survey about your experience with the coding environment and tools.</p>
-    
     <div class="nav-buttons">
-        <a href="{{ url }}?participant={{ participant_id }}" class="btn btn-primary">Start UX Survey →</a>
+        <a href="{{ url }}?participant={{ participant_id }}" class="btn btn-primary">Go to the questionnaire →</a>
     </div>
 </div>
 {% endblock %}
