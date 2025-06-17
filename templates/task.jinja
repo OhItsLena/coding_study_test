@@ -12,25 +12,18 @@ h1 {
 .participant-id {
     text-align: center;
 }
-.timer-section {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 15px;
-    margin: 20px 0;
-    text-align: center;
-}
-.timer-display {
-    font-size: 1.5em;
-    font-weight: bold;
-    color: #28a745;
-    margin: 10px 0;
-}
-.timer-warning {
-    color: #ffc107;
-}
-.timer-danger {
-    color: #dc3545;
+.subtle-stopwatch {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #6c757d;
+    font-size: 0.85em;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
 }
 .timer-modal {
     display: none;
@@ -52,7 +45,6 @@ h1 {
     text-align: center;
 }
 .timer-modal h3 {
-    color: #dc3545;
     margin-bottom: 15px;
 }
 .timer-modal-buttons {
@@ -102,18 +94,6 @@ h1 {
 .coding-reminder.ai-assisted {
     border-left-color: #17a2b8;
     background: rgba(23, 162, 184, 0.08);
-}
-.progress-bar {
-    background: #e9ecef;
-    border-radius: 10px;
-    height: 20px;
-    margin: 20px 0;
-    overflow: hidden;
-}
-.progress-fill {
-    background: linear-gradient(90deg, #28a745, #20c997);
-    height: 100%;
-    transition: width 0.3s ease;
 }
 .task-requirement {
     background: white;
@@ -184,7 +164,7 @@ h1 {
     color: #666;
 }
 .complete-button {
-    background: #28a745;
+    background: #007bff;
     color: white;
     border: none;
     padding: 10px 20px;
@@ -194,69 +174,7 @@ h1 {
     margin-top: 15px;
 }
 .complete-button:hover {
-    background: #218838;
-}
-.locked-message {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-    border-radius: 5px;
-    padding: 15px;
-    margin-top: 15px;
-    color: #856404;
-}
-.status-badge {
-    font-size: 0.8em;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-weight: bold;
-    margin-left: 10px;
-}
-.status-completed {
-    background: #d4edda;
-    color: #155724;
-}
-.status-current {
-    background: #cce7ff;
-    color: #004085;
-}
-.status-locked {
-    background: #e2e3e5;
-    color: #6c757d;
-}
-.task-title {
-    font-size: 1.3em;
-    font-weight: bold;
-    color: #333;
-    margin: 0;
-}
-.task-description {
-    margin: 15px 0;
-    line-height: 1.6;
-    color: #555;
-}
-.task-details {
-    margin-top: 15px;
-}
-.task-details ul {
-    margin: 10px 0;
-    padding-left: 25px;
-}
-.task-details li {
-    margin: 8px 0;
-    color: #666;
-}
-.complete-button {
-    background: #28a745;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 1em;
-    margin-top: 15px;
-}
-.complete-button:hover {
-    background: #218838;
+    background: #0056b3;
 }
 .locked-message {
     background: #fff3cd;
@@ -286,29 +204,30 @@ h1 {
     color: #6c757d;
 }
 .open-vscode-btn {
-    background: #17a2b8;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 5px;
-    cursor: pointer;
+    color: #17a2b8;
     font-size: 0.9em;
-    margin-left: 10px;
-    text-decoration: none;
-    display: inline-block;
 }
 .open-vscode-btn:hover {
-    background: #138496;
-    color: white;
-    text-decoration: none;
+    color: #138496;
+    text-decoration: underline;
 }
 .coding-tools {
     background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 15px;
-    margin: 20px 0;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 10px 15px;
+    margin: 15px 0;
     text-align: center;
+    font-size: 0.9em;
+}
+.coding-tools h4 {
+    font-size: 1em;
+    margin: 0 0 8px 0;
+    color: #6c757d;
+}
+.coding-tools p {
+    margin: 5px 0;
+    color: #6c757d;
 }
 {% endblock %}
 
@@ -327,25 +246,15 @@ h1 {
     <h1>Coding Task</h1>
     <div class="participant-id">Participant ID: {{ participant_id }}</div>
     
-    <div class="timer-section">
-        <h4>⏰ Session Timer</h4>
-        <div id="timer-display" class="timer-display">40:00</div>
-        <p><small>You have 40 minutes to complete as many tasks as possible</small></p>
-    </div>
-    
-    <div class="progress-section">
-        <h3>Progress: {{ completed_tasks|length }} of {{ total_tasks }} tasks completed</h3>
-        <div class="progress-bar">
-            <div class="progress-fill" style="width: {{ (completed_tasks|length / total_tasks * 100)|round(1) }}%"></div>
-        </div>
+    <!-- Subtle stopwatch in upper right corner -->
+    <div id="subtle-stopwatch" class="subtle-stopwatch">
+        <span id="elapsed-time">00:00</span>
     </div>
     
     <div class="coding-tools">
-        <h4>🛠️ Coding Environment</h4>
-        <p>Your repository should open automatically in VS Code. If it doesn't, click the button below:</p>
-        <a href="/open-vscode" class="open-vscode-btn">📝 Open VS Code</a>
-        <br><br>
-        <small>Repository location: study-{{ participant_id }}</small>
+        <h4>Coding Environment</h4>
+        <p>Repository opens automatically in VS Code. If it doesn't: <a href="/open-vscode" class="open-vscode-btn">Open VS Code</a></p>
+        <small>Repository: study-{{ participant_id }}</small>
     </div>
     
     {% for requirement in task_requirements %}
@@ -424,7 +333,7 @@ h1 {
 <!-- Timer Modal -->
 <div id="timer-modal" class="timer-modal">
     <div class="timer-modal-content">
-        <h3>⏰ Time's Up!</h3>
+        <h3>Time's Up!</h3>
         <p>You've reached the 40-minute time limit for the coding session.</p>
         <p>You can either:</p>
         <div class="timer-modal-buttons">
@@ -440,47 +349,36 @@ h1 {
 </div>
 
 <script>
-let timerInterval;
-let remainingTime = {{ remaining_time }};
+let elapsedTime = {{ 40 * 60 - remaining_time }}; // Calculate elapsed time from remaining time
 let timerFinished = {{ timer_finished|lower }};
 let modalShown = false;
 
-function formatTime(seconds) {
+function formatElapsedTime(seconds) {
     const minutes = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-function updateTimerDisplay() {
-    const timerDisplay = document.getElementById('timer-display');
+function updateStopwatch() {
+    const stopwatchDisplay = document.getElementById('elapsed-time');
+    stopwatchDisplay.textContent = formatElapsedTime(elapsedTime);
+}
+
+function startStopwatch() {
+    updateStopwatch();
     
-    if (remainingTime <= 0) {
-        timerDisplay.textContent = '0:00';
-        timerDisplay.className = 'timer-display timer-danger';
+    const stopwatchInterval = setInterval(() => {
+        elapsedTime += 1;
+        updateStopwatch();
         
-        if (!modalShown && !timerFinished) {
-            showTimerModal();
-            modalShown = true;
+        // Stop at 40 minutes (2400 seconds) if needed
+        if (elapsedTime >= 2400 && !timerFinished) {
+            if (!modalShown) {
+                showTimerModal();
+                modalShown = true;
+            }
         }
-        
-        // Disable new task buttons if timer is finished
-        if (timerFinished) {
-            disableNewTasks();
-        }
-        
-        return;
-    }
-    
-    timerDisplay.textContent = formatTime(remainingTime);
-    
-    // Change color based on remaining time
-    if (remainingTime <= 300) { // 5 minutes
-        timerDisplay.className = 'timer-display timer-danger';
-    } else if (remainingTime <= 600) { // 10 minutes
-        timerDisplay.className = 'timer-display timer-warning';
-    } else {
-        timerDisplay.className = 'timer-display';
-    }
+    }, 1000);
 }
 
 function showTimerModal() {
@@ -514,11 +412,11 @@ function disableNewTasks() {
         const notice = document.createElement('div');
         notice.className = 'timer-expired-notice';
         notice.style.cssText = 'background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center; color: #856404;';
-        notice.innerHTML = '<strong>⏰ Time limit reached:</strong> You can finish your current task but cannot start new ones.';
+        notice.innerHTML = '<strong>Time limit reached:</strong> You can finish your current task but cannot start new ones.';
         
         const taskCard = document.querySelector('.task-card');
-        const timerSection = document.querySelector('.timer-section');
-        taskCard.insertBefore(notice, timerSection.nextSibling);
+        const codingTools = document.querySelector('.coding-tools');
+        taskCard.insertBefore(notice, codingTools);
     }
 }
 
@@ -534,19 +432,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
-
-function startTimer() {
-    updateTimerDisplay();
-    
-    timerInterval = setInterval(() => {
-        remainingTime -= 1;
-        updateTimerDisplay();
-        
-        if (remainingTime <= 0) {
-            clearInterval(timerInterval);
-        }
-    }, 1000);
-}
 
 // Event listeners for modal buttons
 document.getElementById('btn-continue-survey').addEventListener('click', function() {
@@ -569,12 +454,12 @@ window.addEventListener('click', function(event) {
     }
 });
 
-// Start the timer when page loads
+// Start the stopwatch when page loads
 document.addEventListener('DOMContentLoaded', function() {
     if (timerFinished) {
         disableNewTasks();
     }
-    startTimer();
+    startStopwatch();
 });
 </script>
 {% endblock %}
