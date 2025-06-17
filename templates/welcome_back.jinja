@@ -3,63 +3,81 @@
 {% block title %}Welcome Back - Study Session 2{% endblock %}
 
 {% block additional_styles %}
-
-.features-list {
-    text-align: left;
-    margin: 20px 0;
-    padding: 0;
-}
-
-.status-grid {
-    display: flex;
-    gap: 20px;
-    margin: 20px 0;
-    justify-content: center;
-}
-
-.status-item {
-    background: #f8f9fa;
-    padding: 20px;
+.start-btn {
+    background: #00883A;
+    color: white;
+    padding: 12px 30px;
+    border: none;
     border-radius: 5px;
-    text-align: center;
-    flex: 1;
-    max-width: 200px;
-}
-
-.status-badge {
+    font-size: 1.1em;
+    cursor: pointer;
+    text-decoration: none;
     display: inline-block;
-    padding: 8px 16px;
-    border-radius: 20px;
+    margin-top: 20px;
+}
+.start-btn:hover {
+    background: #006B2E;
+}
+.welcome-card {
+    text-align: left;
+}
+.welcome-card h1 {
+    text-align: center;
+    margin-bottom: 30px;
+}
+.participant-highlight {
+    color: #00883A;
     font-weight: bold;
-    margin-top: 10px;
 }
-
-.badge-ai {
-    background: #007bff;
-    color: white;
+.welcome-card h3 {
+    color: #333;
+    margin-top: 25px;
+    margin-bottom: 15px;
 }
-
-.badge-manual {
-    background: #6c757d;
-    color: white;
+.welcome-card ol {
+    margin: 10px 0 15px 20px;
+    padding-left: 0;
 }
-
-.badge-ready {
-    background: #28a745;
-    color: white;
+.welcome-card li {
+    margin-bottom: 5px;
 }
-
+.welcome-card .start-btn {
+    display: block;
+    text-align: center;
+    margin: 30px auto 0 auto;
+    width: fit-content;
+}
 {% endblock %}
 
 {% block content %}
 <div class="welcome-card">
-    <h1>Welcome Back, {{ participant_id }}!</h1>
-    <div class="participant-id">Study Session 2</div>
+    <h1>Welcome back <span class="participant-highlight">{{ participant_id }}</span>!</h1>
+
+    <p>Thanks for returning for Stage 2 of our study on AI coding paradigms.<br>
+    In this session, you'll continue working in your assigned coding paradigm ({{ 'vibe coding' if coding_condition == 'vibe' else 'traditional AI-assisted coding' }}).</p>
     
-    <p>Welcome back to the second session of the study! Your coding repository from the previous session is ready, and VS Code will automatically open when you start the coding tasks.</p>
+    <h3>Study Overview</h3>
+    <p>Today you will work on a coding task that builds on your previous work.</p>
     
-    <a href="{{ url_for('task') }}" class="btn btn-primary">
-        Start Session 2 →
-    </a>
+    <p><strong>Stage 1 (last week):</strong></p>
+    <ul>
+        <li>already completed</li>
+    </ul>
+    
+    <p><strong>Stage 2 (today):</strong></p>
+    <ol>
+        <li>additional coding task</li>
+        <li>post-task questionnaire</li>
+    </ol>
+
+    <p>This session will take approximately <strong>45-60 minutes</strong>.</p>
+
+    <p>Your screen will be recorded. We will also log your code, AI interactions, and questionnaire responses. All data is anonymous, confidential, and used only for academic research.</p>
+
+    <p><i><strong>Note:</strong> You will receive compensation only after completing both stages of the study.</i></p>
+
+    <p>When you're ready, click "Continue" to begin with your session.</p>
+    
+    <a href="{{ url_for('task') }}" class="start-btn">Continue</a>
 </div>
 {% endblock %}

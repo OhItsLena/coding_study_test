@@ -5,8 +5,8 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 50px auto;
+            max-width: 700px;
+            margin: 20px auto;
             padding: 20px;
             text-align: center;
         }
@@ -44,12 +44,12 @@
         }
         
         .btn-primary {
-            background: #007bff;
+            background: #00883A;
             color: white;
         }
         
         .btn-primary:hover {
-            background: #0056b3;
+            background: #006B2E;
         }
         
         .btn-secondary {
@@ -62,12 +62,12 @@
         }
         
         .btn-success {
-            background: #007bff;
+            background: #00883A;
             color: white;
         }
         
         .btn-success:hover {
-            background: #0056b3;
+            background: #006B2E;
         }
         
         /* Common navigation button container */
@@ -77,10 +77,25 @@
             margin-top: 30px;
         }
         
+        /* Footer styles */
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            font-size: 0.9em;
+            color: #6c757d;
+            text-align: center;
+        }
+        
         {% block additional_styles %}{% endblock %}
     </style>
 </head>
 <body>
     {% block content %}{% endblock %}
+    
+    <div class="footer">
+        2025 LMU Vibe Coding Study.<br>
+        If you have any questions or run into technical issues, please contact the study coordination team.
+    </div>
 </body>
 </html>

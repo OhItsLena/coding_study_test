@@ -1,10 +1,10 @@
 {% extends "base.jinja" %}
 
-{% block title %}{{ participant_id }} - Welcome{% endblock %}
+{% block title %}Welcome - Study Session 1{% endblock %}
 
 {% block additional_styles %}
 .start-btn {
-    background: #007bff;
+    background: #00883A;
     color: white;
     padding: 12px 30px;
     border: none;
@@ -13,16 +13,74 @@
     cursor: pointer;
     text-decoration: none;
     display: inline-block;
+    margin-top: 20px;
 }
 .start-btn:hover {
-    background: #0056b3;
+    background: #006B2E;
+}
+.welcome-card {
+    text-align: left;
+}
+.welcome-card h1 {
+    text-align: center;
+    margin-bottom: 30px;
+}
+.participant-highlight {
+    color: #00883A;
+    font-weight: bold;
+}
+.welcome-card h3 {
+    color: #333;
+    margin-top: 25px;
+    margin-bottom: 15px;
+}
+.welcome-card ol {
+    margin: 10px 0 15px 20px;
+    padding-left: 0;
+}
+.welcome-card li {
+    margin-bottom: 5px;
+}
+.welcome-card .start-btn {
+    display: block;
+    text-align: center;
+    margin: 30px auto 0 auto;
+    width: fit-content;
 }
 {% endblock %}
 
 {% block content %}
 <div class="welcome-card">
-    <h1>Welcome to the Study</h1>
-    <div class="participant-id">Participant ID: {{ participant_id }}</div>
-    <a href="/background-questionnaire" class="start-btn">Start Session →</a>
+    <h1>Welcome <span class="participant-highlight">{{ participant_id }}</span>!</h1>
+    
+    <p>Thank you for joining our study on AI coding paradigms. 
+    This is a two-stage study, and you've been assigned to the {{ 'vibe coding' if coding_condition == 'vibe' else 'traditional AI-assisted coding' }} group.</p>
+
+    <h3>Study overview</h3>
+    <p>You'll complete two coding sessions, spaced one week apart.</p>
+
+    <p><strong>Stage 1 (today):</strong></p>
+    <ol>
+        <li>background questionnaire</li>
+        <li>introduction to your assigned coding paradigm</li>
+        <li>coding task</li>
+        <li>post-task questionnaire</li>
+    </ol>
+
+    <p><strong>Stage 2 (next week):</strong></p>
+    <ol>
+        <li>additional coding task</li>
+        <li>post-task questionnaire</li>
+    </ol>
+
+    <p>Each session takes about <strong>45-60 minutes</strong> to complete.</p>
+
+    <p>Your screen will be recorded. We will also log your code, AI interactions, and questionnaire responses. All data is anonymous, confidential, and used only for academic research.</p>
+
+    <p><i><strong>Note:</strong> You will receive compensation only after completing both stages of the study.</i></p>
+
+    <p>When you're ready, click "Start Study" to begin with your session.</p>
+
+    <a href="/background-questionnaire" class="start-btn">Start Study</a>
 </div>
 {% endblock %}

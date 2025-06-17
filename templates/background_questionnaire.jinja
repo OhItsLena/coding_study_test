@@ -11,8 +11,16 @@
     <h1>Background Survey</h1>
     <div class="participant-id">Participant ID: {{ participant_id }}</div>
     
+    <div class="survey-content">
+        <p>Before you begin your first task, we'd like to learn a bit about your background and experience.</p>
+        
+        <p>This short questionnaire will take approximately <strong>3–5 minutes</strong> to complete. It helps us better understand your familiarity with programming, AI tools, and development workflows. There are <strong>no right or wrong answers</strong>, and your responses will be kept confidential and used solely for research purposes.</p>
+        
+        <p>Please complete the questionnaire before proceeding.</p>
+    </div>
+    
     <div class="nav-buttons">
-        <a href="{{ url }}?participant={{ participant_id }}" class="btn btn-primary">Start Survey →</a>
+        <a href="{{ url }}?participant={{ participant_id }}" class="btn btn-primary">Go to the questionnaire</a>
     </div>
 </div>
 {% endblock %}

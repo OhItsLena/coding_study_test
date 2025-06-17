@@ -39,6 +39,7 @@ TASK_REQUIREMENTS = load_task_requirements()
 def home():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
     
     # Log route visit if this is the first time
     if should_log_route(session, 'home', study_stage):
@@ -60,7 +61,8 @@ def home():
     
     return render_template('home.jinja', 
                          participant_id=participant_id,
-                         study_stage=study_stage)
+                         study_stage=study_stage,
+                         coding_condition=coding_condition)
 
 @app.route('/clear-session')
 def clear_session():
