@@ -1,0 +1,74 @@
+{% extends "base.jinja" %}
+
+{% block title %}{{ participant_id }} - Study Complete{% endblock %}
+
+{% block additional_styles %}
+.completion-message {
+    font-size: 1.2em;
+    color: #00883A;
+    margin-bottom: 25px;
+    font-weight: bold;
+}
+.stage-info {
+    background: #e8f5e8;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 20px 0;
+    border-left: 4px solid #00883A;
+}
+.thank-you-message {
+    font-size: 1.1em;
+    line-height: 1.6;
+    margin: 20px 0;
+}
+.thank-you-message h3 {
+    color: #00883A;
+}
+.next-steps {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 5px;
+    margin: 25px 0;
+    text-align: left;
+}
+.next-steps h3 {
+    color: #333;
+    margin-bottom: 15px;
+    text-align: center;
+}
+.next-steps ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+.next-steps li {
+    margin-bottom: 8px;
+}
+.highlight {
+    color: #00883A;
+    font-weight: bold;
+}
+{% endblock %}
+
+{% block content %}
+<div class="survey-card">
+    <h1>Study Session Complete</h1>
+    <div class="participant-id">Participant ID: {{ participant_id }}</div>
+    
+    {% if study_stage == 1 %}
+    <div class="thank-you-message">
+        <h3>Thank you for completing Stage 1 of the study!</h3>
+        <p>Your progress has been saved.</p>
+        <p>We'll be in touch in about a week with instructions for <strong>Stage 2</strong>, where you'll return to the same project and continue building on your work.</p>
+        <p>You may close the RDP connection now.</p>
+    </div>
+    {% else %}
+    <div class="thank-you-message">
+        <h3><strong>Thank you for completing Stage 2!</strong></h3>
+        <p>This concludes your participation in the study.<br>
+        We sincerely appreciate your time and effort over both sessions.</p>
+        <p>Your responses and work will help us better understand how developers interact with AI coding tools. Compensation will be processed shortly.</p>
+        <p>You may close the RDP connection now.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

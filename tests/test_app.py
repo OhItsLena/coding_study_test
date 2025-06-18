@@ -205,3 +205,47 @@ class TestFlaskRoutes:
                         assert 'timer_started' in json_data
                         assert json_data['timer_started'] is True
                         assert json_data['remaining_time'] == 2390  # 2400 - 10
+
+    def test_goodbye_route(self, client):
+        """Test goodbye page route."""
+        with patch('app.get_participant_id', return_value='test-participant'):
+            with patch('app.get_study_stage', return_value=1):
+                with patch('app.get_coding_condition', return_value='vibe'):
+                    with patch('app.should_log_route', return_value=True):
+                        with patch('app.get_session_data', return_value={
+                            'current_task': 1,
+                            'completed_tasks': [1, 2, 3],
+                            'timer_start': None,
+                            'timer_finished': True
+                        }):
+                            with patch('app.log_route_visit', return_value=True):
+                                with patch('app.mark_route_as_logged'):
+                                    response = client.get('/goodbye')
+                                    
+                                    assert response.status_code == 200
+                                    assert b'Study Session Complete' in response.data
+                                    assert b'test-participant' in response.data
+                                    assert b'Stage 1 Complete' in response.data
+                                    assert b'vibe' in response.data
+
+    def test_goodbye_route_stage2(self, client):
+        """Test goodbye page route for stage 2."""
+        with patch('app.get_participant_id', return_value='test-participant'):
+            with patch('app.get_study_stage', return_value=2):
+                with patch('app.get_coding_condition', return_value='traditional'):
+                    with patch('app.should_log_route', return_value=True):
+                        with patch('app.get_session_data', return_value={
+                            'current_task': 1,
+                            'completed_tasks': [1, 2, 3],
+                            'timer_start': None,
+                            'timer_finished': True
+                        }):
+                            with patch('app.log_route_visit', return_value=True):
+                                with patch('app.mark_route_as_logged'):
+                                    response = client.get('/goodbye')
+                                    
+                                    assert response.status_code == 200
+                                    assert b'Study Session Complete' in response.data
+                                    assert b'test-participant' in response.data
+                                    assert b'Stage 2 Complete' in response.data
+                                    assert b'traditional' in response.data

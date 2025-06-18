@@ -243,6 +243,37 @@ def ux_questionnaire():
                          study_stage=study_stage,
                          url=ux_survey_url)
 
+@app.route('/goodbye')
+def goodbye():
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
+    
+    # Log route visit if this is the first time
+    if should_log_route(session, 'goodbye', study_stage):
+        # Include session data for context about study completion
+        session_data = get_session_data(session, study_stage)
+        session_data['study_session_complete'] = True
+        session_data['goodbye_page_accessed'] = True
+        session_data['final_coding_condition'] = coding_condition
+        
+        log_route_visit(
+            participant_id=participant_id,
+            route_name='goodbye',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data=session_data,
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG,
+            async_mode=ASYNC_GITHUB_MODE
+        )
+        mark_route_as_logged(session, 'goodbye', study_stage)
+    
+    return render_template('goodbye.jinja', 
+                         participant_id=participant_id,
+                         study_stage=study_stage,
+                         coding_condition=coding_condition)
+
 @app.route('/tutorial')
 def tutorial():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
@@ -389,7 +420,7 @@ def task():
     
     # Calculate elapsed time and remaining time
     elapsed_time = time.time() - timer_start
-    remaining_time = max(0, 200 - elapsed_time)  # 40 minutes = 2400 seconds
+    remaining_time = max(0, 2400 - elapsed_time)  # 40 minutes = 2400 seconds
     
     # Get tasks appropriate for the current study stage
     task_requirements = get_tasks_for_stage(study_stage, TASK_REQUIREMENTS)
