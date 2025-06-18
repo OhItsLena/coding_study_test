@@ -1,0 +1,90 @@
+{
+    "tutorials":
+    [
+        {
+            "id": "vibe",
+            "title": "Vibe Coding Tutorial",
+            "description": "This tutorial is intended to familiarize yourself with the provided coding environment. You will later implement a task with vibe coding using the Visual Studio Code IDE and the GitHub Copilot Extension. Here you will learn the most important features by implementing a calculator using Copilot's agent, edit, and ask modes in a vibe coding way, without writing code manually.",
+            "steps": [
+                {
+                "title": "Scaffold with Copilot Agent",
+                "video": "tutorial_vibe1.gif",
+                "instruction": "Use Copilot Chat (Agent Mode) to generate the base structure of a calculator app.",
+                "example_prompt": "Scaffold the UI for a calculator app using HTML, CSS, and JavaScript. It should have a display and buttons for numbers and basic operations.",
+                "try_it_note": "Copilot will automatically create the necessary files. You should see a basic calculator layout with buttons and a display."
+                },
+                {
+                "title": "Make It Functional with Edit Mode",
+                "video": "tutorial_vibe2.gif",
+                "instruction": "Use Copilot Edit Mode to add functionality to the calculator.",
+                "example_prompt": "Make the calculator buttons update the display and calculate the result when I press =.",
+                "try_it_note": "Select your entire code and use Edit Mode to apply the change. Test the buttons in the browser."
+                },
+                {
+                "title": "Brainstorm Features with Ask Mode",
+                "video": "tutorial_vibe3.gif",
+                "instruction": "Use Ask Mode to explore feature ideas and implement one of them.",
+                "example_prompt": "What are some small features I could add to make this calculator more useful?",
+                "try_it_note": "Use Ask Mode on a code section, pick a feature Copilot suggests (like keyboard support), and add it using natural language.",
+                "note": "Don't write the implementation yourself - ask the AI to do it."
+                },
+                {
+                "title": "Change the Design Based on Vibes",
+                "video": "tutorial_vibe4.gif",
+                "instruction": "Use a free browser-based AI tool (like Claude or Gemini) to improve the visual design.",
+                "example_prompt": "I don't like the design of this calculator app. It gives off a bad vibe. Make it fun and modern.",
+                "try_it_note": "Paste your code into a browser-based AI tool, describe the design you want, and bring the result back into your editor."
+                },
+                {
+                "title": "Fix a Bug Using Copilot Agent",
+                "video": "tutorial_vibe5.gif",
+                "instruction": "Simulate a bug and ask Copilot Agent to fix it for you.",
+                "example_prompt": "When I press =, the calculator shows nothing. Can you fix it?",
+                "try_it_note": "Break a feature, describe the issue in Copilot Agent, and let it fix the code for you.",
+                "note": "Make sure to provide the neccessary context for the Agent."
+                }
+            ],
+            "wrapup": {
+                "message": "You're ready to start the main task. Keep using natural language to describe features, let the AI handle the details, and iterate quickly. Don’t write or debug code manually unless something is clearly broken."
+            }
+        },
+        {
+            "id": "ai-assisted",
+            "title": "AI-Assisted Coding Tutorial",
+            "description": "This tutorial is intended to familiarize yourself with the coding environment and how to use GitHub Copilot to assist your development workflow. You will build a simple calculator app while practicing different AI-assisted techniques such as code completion, inline suggestions, Ask Mode, and online search.",
+            "steps": [
+                {
+                "title": "Use Code Completion for a Function",
+                "video": "tutorial_ai1.gif",
+                "instruction": "Use Copilot's inline code completion (ghost text) to implement a function that evaluates simple math expressions.",
+                "example_prompt": "// Write a function that takes a string like '2+2' and returns the result",
+                "try_it_note": "Start typing the function. Copilot will suggest completions as ghost text. Press Tab to accept and complete the function."
+                },
+                {
+                "title": "Use Inline Suggestions for Styling",
+                "video": "tutorial_ai2.gif",
+                "instruction": "Use Copilot's inline suggestions to adjust the calculator's layout and styling.",
+                "example_prompt": "/* Make the calculator layout centered and responsive */",
+                "try_it_note": "Write a comment describing the desired change in your CSS file and start the next line. Copilot will suggest CSS code you can accept."
+                },
+                {
+                "title": "Brainstorm Features with Ask Mode",
+                "video": "tutorial_ai3.gif",
+                "instruction": "Use Copilot Ask Mode to get ideas for new features for your calculator app.",
+                "example_prompt": "What are some additional features I could add to this calculator app?",
+                "try_it_note": "Use Ask Mode from the Command Palette or right-click menu. Review the suggestions and implement one you like with your own coding style, optionally using Copilot completions."
+                },
+                {
+                "title": "Search StackOverflow for Help",
+                "video": "tutorial_ai4.gif",
+                "instruction": "When you're unsure how to implement a feature, use your browser to search for code examples and explanations.",
+                "example_prompt": "Search: 'JavaScript calculator keyboard input site:stackoverflow.com'",
+                "try_it_note": "Find a relevant code snippet or explanation on StackOverflow. Adapt and integrate it into your project manually."
+                }
+            ],
+            "wrapup": {
+                "message": "You're ready to start the main task. Keep using AI tools to support your development, but write, debug, and review the code yourself. Think critically about the suggestions and maintain full control of your implementation."
+            }
+        }
+    ]
+}

@@ -31,6 +31,34 @@ def load_task_requirements():
     return _task_manager.task_requirements
 
 
+def load_tutorials():
+    """Load tutorials from the JSON file."""
+    import json
+    import os
+    
+    try:
+        tutorials_file = os.path.join(os.path.dirname(__file__), 'tutorials.json')
+        with open(tutorials_file, 'r', encoding='utf-8') as f:
+            tutorials_data = json.load(f)
+        return tutorials_data.get('tutorials', [])
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error loading tutorials: {e}")
+        return []
+
+
+def get_tutorial_by_condition(coding_condition, tutorials=None):
+    """Get the tutorial data for a specific coding condition."""
+    if tutorials is None:
+        tutorials = load_tutorials()
+    
+    for tutorial in tutorials:
+        if tutorial.get('id') == coding_condition:
+            return tutorial
+    
+    # Return None if no matching tutorial found
+    return None
+
+
 def get_tasks_for_stage(study_stage, task_requirements=None):
     """Get the appropriate tasks based on the study stage."""
     return _task_manager.get_tasks_for_stage(study_stage)

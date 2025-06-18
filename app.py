@@ -8,6 +8,7 @@ from services import (
     check_and_clone_repository, commit_code_changes, test_github_connectivity,
     setup_repository_for_stage, log_route_visit, should_log_route, mark_route_as_logged,
     mark_stage_transition, get_async_github_stats, get_async_github_queue_size,
+    load_tutorials, get_tutorial_by_condition,
     test_github_connectivity_async, stop_async_github_service, wait_for_async_github_completion,
     save_vscode_workspace_storage, save_vscode_workspace_storage_async,
     start_session_recording, stop_session_recording, is_recording_active
@@ -34,6 +35,9 @@ ASYNC_GITHUB_MODE = os.getenv('ASYNC_GITHUB_MODE', 'true').lower() == 'true'
 
 # Load task requirements at startup
 TASK_REQUIREMENTS = load_task_requirements()
+
+# Load tutorials at startup
+TUTORIALS = load_tutorials()
 
 @app.route('/')
 def home():
@@ -303,10 +307,13 @@ def tutorial():
         return redirect(url_for('welcome_back'))
     
     coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
+    tutorial_data = get_tutorial_by_condition(coding_condition, TUTORIALS)
+    
     return render_template('tutorial.jinja', 
                          participant_id=participant_id,
                          study_stage=study_stage,
-                         coding_condition=coding_condition)
+                         coding_condition=coding_condition,
+                         tutorial=tutorial_data)
 
 @app.route('/welcome-back')
 def welcome_back():

@@ -8,7 +8,8 @@ echo "Setting up development environment..."
 # Export development mode environment variables
 export DEVELOPMENT_MODE=true
 export DEV_PARTICIPANT_ID=dev-participant
-export DEV_STAGE=2
+export DEV_STAGE=1
+export DEV_CODING_CONDITION=ai-assisted
 export SURVEY_URL=https://example.com/dev-survey
 export UX_SURVEY_URL=https://example.com/dev-ux-survey
 export GITHUB_ORG=LMU-Vibe-Coding-Study

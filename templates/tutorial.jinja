@@ -11,47 +11,136 @@ h1 {
 }
 .participant-id {
     text-align: center;
+    margin-bottom: 30px;
 }
-.video-placeholder {
-    background: #e9ecef;
-    border: 2px dashed #adb5bd;
+.tutorial-step {
+    margin: 30px 0;
+    padding: 20px;
+    border: 1px solid #dee2e6;
     border-radius: 8px;
-    padding: 60px 20px;
-    text-align: center;
-    margin: 20px 0;
-    color: #6c757d;
+    background-color: #f8f9fa;
 }
-.video-icon {
-    font-size: 3em;
-    margin-bottom: 10px;
-    display: block;
+.tutorial-step h3 {
+    margin-top: 0;
+    color: #495057;
 }
 .tutorial-description {
     margin: 20px 0;
     line-height: 1.6;
     color: #555;
 }
+.example-prompt {
+    background-color: #e9ecef;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 10px 0;
+    font-family: monospace;
+    border-left: 4px solid #007bff;
+}
+.try-it-note {
+    background-color: #d4edda;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 10px 0;
+    border-left: 4px solid #28a745;
+}
+.note {
+    background-color: #fff3cd;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 10px 0;
+    border-left: 4px solid #ffc107;
+}
+.tutorial-video {
+    text-align: center;
+    margin: 15px 0;
+}
+.tutorial-video img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.technical-notes {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin: 15px 0;
+}
+.technical-notes h4 {
+    margin: 0 0 10px 0;
+    font-size: 1em;
+}
 {% endblock %}
 
 {% block content %}
 <div class="tutorial-card">
-    <h1>Coding Tutorial</h1>
+    <h1>{{ tutorial.title if tutorial else 'Coding Tutorial' }}</h1>
     <div class="participant-id">Participant ID: {{ participant_id }}</div>
     
-    <div class="tutorial-description">
-        <p>Welcome to the coding tutorial! This video will explain your assigned coding condition and provide guidance for the upcoming coding tasks.</p>
+    <p>You've been assigned <strong>{% if coding_condition == 'vibe' %}Vibe Coding{% elif coding_condition == 'ai-assisted' %}AI-Assisted Coding{% else %}{{ coding_condition }}{% endif %}</strong> as a coding paradigm for this study.</p>
+    <div class="technical-notes">
+        {% if coding_condition == 'vibe' %}
+        <h4>Vibe Coding</h4>
+        <p>Developers use AI to generate and modify code based on conversational, high-level descriptions rather than writing it manually. This approach shifts the developer's role from detailed implementation to outcome-focused guidance, with minimal review of the underlying code. The term reflects the intuitive, flow-based nature of the process where developers "vibe" with the AI assistant rather than engaging in traditional coding practices.</p>
+        {% elif coding_condition == 'ai-assisted' %}
+        <h4>AI-Assisted Coding</h4>
+        <p>Developers use AI to support the software development process while continuing to write, understand, and manage code manually. AI tools are used for tasks like code completion, code generation, code reviews, and writing tests or documentation. This approach enhances traditional workflows by automating routine or repetitive tasks.</p>
+        {% endif %}
     </div>
     
-    <div class="video-placeholder">
-        <span class="video-icon">🎥</span>
-        <h3>Video Tutorial Placeholder</h3>
-        <p>The tutorial video for your assigned coding condition will be displayed here.</p>
-        <p><em>Video content will be loaded based on your study configuration.</em></p>
-    </div>
-    
-    <div class="tutorial-description">
-        <p>After watching the tutorial, you'll be ready to begin the coding tasks. Please make sure you understand the coding approach demonstrated in the video before proceeding.</p>
-    </div>
+    {% if tutorial %}
+        <div class="tutorial-description">
+            <p>{{ tutorial.description }}</p>
+        </div>
+        
+        {% for step in tutorial.steps %}
+        <div class="tutorial-step">
+            <h3>{{ loop.index }}. {{ step.title }}</h3>
+            
+            {% if step.video %}
+            <div class="tutorial-video">
+                <img src="{{ url_for('static', filename=step.video) }}" alt="{{ step.title }} demonstration" />
+            </div>
+            {% endif %}
+            
+            <p>{{ step.instruction }}</p>
+            
+            {% if step.example_prompt %}
+            <div class="example-prompt">
+                <strong>Example prompt:</strong><br>
+                "{{ step.example_prompt }}"
+            </div>
+            {% endif %}
+            
+            {% if step.try_it_note %}
+            <div class="try-it-note">
+                <strong>Try it:</strong> {{ step.try_it_note }}
+            </div>
+            {% endif %}
+            
+            {% if step.note %}
+            <div class="note">
+                <strong>Note:</strong> {{ step.note }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        
+        {% if tutorial.wrapup %}
+        <div class="tutorial-description">
+            <p>{{ tutorial.wrapup.message }}</p>
+        </div>
+        {% endif %}
+        
+    {% else %}
+        <div class="tutorial-description">
+            <p>Welcome to the coding tutorial! This tutorial will guide you through your assigned coding condition.</p>
+            <p><em>Tutorial content for condition "{{ coding_condition }}" not found. Please contact the study administrator.</em></p>
+        </div>
+    {% endif %}
     
     <div class="nav-buttons">
         <a href="/task" class="btn btn-primary">Start Coding Task →</a>
