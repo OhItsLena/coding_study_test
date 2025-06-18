@@ -72,28 +72,24 @@ h1 {
 .btn-finish-task:hover {
     background: #5a6268;
 }
-.coding-reminder {
-    background: rgba(248, 249, 250, 0.95);
-    border: none;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 24px;
+.coding-guidelines {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin: 15px 0;
+}
+.coding-guidelines h4 {
+    margin: 0 0 10px 0;
+    font-size: 1em;
+}
+.coding-guidelines ul {
+    margin: 0;
+    padding-left: 20px;
     font-size: 0.9em;
-    color: #495057;
-    text-align: center;
-    position: sticky;
-    top: 10px;
-    z-index: 100;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
-.coding-reminder.vibe {
-    border-left-color: #6f42c1;
-    background: rgba(111, 66, 193, 0.08);
-}
-.coding-reminder.ai-assisted {
-    border-left-color: #17a2b8;
-    background: rgba(23, 162, 184, 0.08);
+.coding-guidelines li {
+    margin: 8px 0;
 }
 .task-requirement {
     background: white;
@@ -247,20 +243,41 @@ h1 {
     margin: 5px 0;
     color: #6c757d;
 }
+.technical-notes {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin: 15px 0;
+}
+.technical-notes h4 {
+    margin: 0 0 10px 0;
+    font-size: 1em;
+}
+.technical-notes ul {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 0.9em;
+}
+.technical-notes li {
+    margin: 8px 0;
+}
+.mockup-section {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 20px;
+    margin: 20px 0;
+    text-align: center;
+}
+.mockup-image {
+    max-width: 50%;
+    height: auto;
+}
 {% endblock %}
 
 {% block content %}
 <div class="task-card">
-    {% if coding_condition == 'vibe' %}
-    <div class="coding-reminder vibe">
-        🔮 <strong>Vibe Coding:</strong> Trust your intuition and code naturally. Focus on understanding and creative problem-solving.
-    </div>
-    {% elif coding_condition == 'ai-assisted' %}
-    <div class="coding-reminder ai-assisted">
-        🤖 <strong>AI-Assisted Coding:</strong> Leverage AI tools and assistance. Use copilot, autocomplete, and other AI features to enhance your coding.
-    </div>
-    {% endif %}
-    
     <h1>Coding Task</h1>
     <div class="participant-id">Participant ID: {{ participant_id }}</div>
     
@@ -269,12 +286,56 @@ h1 {
         <span id="elapsed-time">00:00</span>
     </div>
     
-    <div class="coding-tools">
-        <h4>Coding Environment</h4>
-        <p>Repository opens automatically in VS Code. If it doesn't: <a href="/open-vscode" class="open-vscode-btn">Open VS Code</a></p>
-        <small>Repository: study-{{ participant_id }}</small>
-    </div>
+    <p>Now please use <strong>{% if coding_condition == 'vibe' %}Vibe Coding{% elif coding_condition == 'ai-assisted' %}AI-Assisted Coding{% else %}{{ coding_condition }}{% endif %}</strong> to implement a <strong>PDF Merger Tool</strong>.</p>
     
+    <div class="mockup-section">
+        <img src="/static/mockup.png" alt="PDF Merger Tool Mockup" class="mockup-image">
+    </div>
+
+    <p>You'll receive the task in <strong>step-by-step requirements</strong>. Each new requirement will appear only after you've completed the previous one. When you mark a requirement as completed, your progress is automatically saved.</p>
+    
+    <p>In <strong>40 minutes</strong> from now you'll be reminded to finish your work.</p>
+        
+    <p>The coding environment has been configured for you with the AI tools you need. Your personal coding workspace opens automatically in VS Code. If it doesn't: <a href="/open-vscode" class="open-vscode-btn">Open VS Code</a></p>
+   
+    <div class="technical-notes">
+        <h4>Technical Notes:</h4>
+        <ul>
+            <li>Use <strong>pure JavaScript or TypeScript</strong> (no frontend frameworks)</li>
+            <li>You may use <strong>any open-source libraries</strong> (e.g., for PDF processing)</li>
+            <li>The solution must run <strong>entirely client-side</strong> in the browser (no server)</li>
+            <li>You don't need to adhere to the provided <strong>UI mockup</strong></li>
+            <li><strong>Do not use Git manually</strong>, version control is handled automatically</li>
+        </ul>
+    </div>
+
+    <p>Please remember to use <strong>{% if coding_condition == 'vibe' %}Vibe Coding{% elif coding_condition == 'ai-assisted' %}AI-Assisted Coding{% else %}{{ coding_condition }}{% endif %}</strong> as your development approach!<br>
+    If you're unsure what that means, you can revisit the brief <strong>coding guidelines</strong> below at any time during the task.</p>
+
+    {% if coding_condition == 'vibe' %}
+    <div class="coding-guidelines">
+        <h4>Vibe Coding Guidelines:</h4>
+        <ul>
+            <li>Use natural language to describe the features, look, and feel you want</li>
+            <li>Let the AI handle the implementation details</li>
+            <li>Ask the AI to generate code, make changes and fix bugs</li>
+            <li>Iterate fast: try ideas, test, and revise quickly</li>
+            <li>Don't write code manually or debug yourself</li>
+            <li>Don't review every line of code unless something is clearly wrong</li>
+        </ul>
+    </div>
+    {% elif coding_condition == 'ai-assisted' %}
+    <div class="coding-guidelines">
+        <h4>AI-Assisted Coding Guidelines:</h4>
+        <ul>
+            <li>Write, understand, and manage your own code</li>
+            <li>Treat AI as a collaborative assistant to boost your productivity</li>
+            <li>Use AI tools for code completion, generating boilerplate, or documentation</li>
+            <li>Review and decide which AI suggestions to accept</li>
+        </ul>
+    </div>
+    {% endif %}
+
     {% for requirement in task_requirements %}
         {% if requirement.id <= current_task %}
         <div class="task-requirement 
@@ -299,14 +360,16 @@ h1 {
                 {{ requirement.description }}
             </div>
             
+            {% if requirement.details %}
             <div class="task-details">
-                <strong>Requirements:</strong>
+                <strong>Details:</strong>
                 <ul>
                     {% for detail in requirement.details %}
                     <li>{{ detail }}</li>
                     {% endfor %}
                 </ul>
             </div>
+            {% endif %}
             
             {% if requirement.id == current_task and requirement.id not in completed_tasks %}
             <form method="POST" action="/complete-task" style="margin-top: 15px;">
@@ -329,7 +392,7 @@ h1 {
     {% endif %}
     
     {% if completed_tasks|length == total_tasks %}
-    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 0px 0px 20px 0px; margin: 20px 0; text-align: center;">
         <h3 style="color: #155724; margin-bottom: 10px;">🎉 Congratulations!</h3>
         <p style="color: #155724; margin: 0;">You have completed all coding requirements. Great work!</p>
     </div>
@@ -430,11 +493,31 @@ function disableNewTasks() {
     }
 }
 
+// Save scroll position before form submission and restore after page load
+function saveScrollPosition() {
+    sessionStorage.setItem('taskPageScrollY', window.scrollY.toString());
+}
+
+function restoreScrollPosition() {
+    const savedScrollY = sessionStorage.getItem('taskPageScrollY');
+    if (savedScrollY) {
+        window.scrollTo(0, parseInt(savedScrollY));
+        // Clear the saved position after restoring
+        sessionStorage.removeItem('taskPageScrollY');
+    }
+}
+
 // Override the complete task form submission to reload page to show survey button
 document.addEventListener('DOMContentLoaded', function() {
+    // Restore scroll position when page loads
+    restoreScrollPosition();
+    
     const completeTaskForms = document.querySelectorAll('form[action="/complete-task"]');
     completeTaskForms.forEach(form => {
         form.addEventListener('submit', function(e) {
+            // Save scroll position before form submission
+            saveScrollPosition();
+            
             // If timer is finished, we'll reload the page to show the survey button
             if (timerFinished) {
                 // Let the form submit naturally and the page will reload
@@ -469,6 +552,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (timerFinished) {
         disableNewTasks();
     }
+    
     startStopwatch();
 });
 </script>
