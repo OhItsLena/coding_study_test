@@ -237,13 +237,50 @@ class ScreenRecorder:
                 kwargs['shell'] = True
             
             if system == "Windows":
-                # On Windows, stop OBS using PowerShell
-                stop_cmd = ['powershell', '-Command', 
-                           'Get-Process obs64 -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() }']
-                result = subprocess.run(stop_cmd, **kwargs)
+                # On Windows, try to stop recording first using OBS command line, then quit
+                obs_executable = self._get_obs_executable_path()
+                obs_dir = os.path.dirname(obs_executable)
                 
-                # If graceful shutdown failed, force stop
-                if result.returncode != 0:
+                # First, try to stop recording using OBS command line
+                try:
+                    stop_recording_cmd = [obs_executable, "--stoprecording"]
+                    stop_kwargs = kwargs.copy()
+                    if os.path.exists(obs_dir):
+                        stop_kwargs['cwd'] = obs_dir
+                    
+                    print("Sending stop recording command to OBS...")
+                    result = subprocess.run(stop_recording_cmd, **stop_kwargs, timeout=10)
+                    if result.returncode == 0:
+                        print("Stop recording command sent successfully")
+                        time.sleep(2)  # Give OBS time to stop recording
+                    else:
+                        print(f"Stop recording command failed: {result.stderr}")
+                except Exception as e:
+                    print(f"Failed to send stop recording command: {e}")
+                
+                # Then try to quit OBS gracefully
+                try:
+                    quit_cmd = [obs_executable, "--quit"]
+                    quit_kwargs = kwargs.copy()
+                    if os.path.exists(obs_dir):
+                        quit_kwargs['cwd'] = obs_dir
+                    
+                    print("Sending quit command to OBS...")
+                    result = subprocess.run(quit_cmd, **quit_kwargs, timeout=10)
+                    if result.returncode == 0:
+                        print("Quit command sent successfully")
+                        time.sleep(2)  # Give OBS time to quit
+                    else:
+                        print(f"Quit command failed: {result.stderr}")
+                except Exception as e:
+                    print(f"Failed to send quit command: {e}")
+                
+                # If OBS is still running, force close it
+                time.sleep(1)
+                check_cmd = ['powershell', '-Command', 'Get-Process obs64 -ErrorAction SilentlyContinue']
+                check_result = subprocess.run(check_cmd, **kwargs)
+                if check_result.returncode == 0:
+                    print("OBS still running, force closing...")
                     force_stop_cmd = ['powershell', '-Command', 
                                     'Get-Process obs64 -ErrorAction SilentlyContinue | Stop-Process -Force']
                     subprocess.run(force_stop_cmd, **kwargs)
