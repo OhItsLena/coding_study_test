@@ -69,18 +69,11 @@ class ScreenRecorder:
                     self.recording_file_path
                 ]
             elif platform.system() == "Windows":
-                # Use gdigrab for Windows screen capture
+                # Use OBS for Windows screen capture
+                obs_path = r"C:\Program Files\obs-studio\bin\64bit"
                 ffmpeg_cmd = [
-                    "ffmpeg",
-                    "-f", "gdigrab",
-                    "-framerate", "15",
-                    "-i", "desktop",
-                    "-vcodec", "libx264",
-                    "-preset", "ultrafast",
-                    "-crf", "28",
-                    "-pix_fmt", "yuv420p",  # Ensure compatibility
-                    "-y",  # Overwrite output file
-                    self.recording_file_path
+                    "cmd", "/c", 
+                    f'cd "{obs_path}" && start "obs64.exe" --startrecording'
                 ]
             else:  # Linux
                 # Use x11grab for Linux screen capture
@@ -99,15 +92,10 @@ class ScreenRecorder:
             
             # Start the recording process
             print(f"Starting screen recording: {recording_filename}")
-            print(f"FFmpeg command: {' '.join(ffmpeg_cmd)}")
+            print(f"Command: {' '.join(ffmpeg_cmd)}")
             
-            self.recording_process = subprocess.Popen(
-                ffmpeg_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                preexec_fn=os.setsid if platform.system() != "Windows" else None,
-                creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
-            )
+            recording_kwargs = self._get_recording_subprocess_kwargs()
+            self.recording_process = subprocess.Popen(ffmpeg_cmd, **recording_kwargs)
             
             # Give FFmpeg a moment to start and check if it's running
             time.sleep(2)
@@ -149,14 +137,17 @@ class ScreenRecorder:
             print("Stopping screen recording...")
             
             if platform.system() == "Windows":
-                # On Windows, terminate the process
-                self.recording_process.terminate()
+                # On Windows, stop OBS using PowerShell
+                stop_cmd = ['powershell', '-Command', 'Get-Process obs64 | Stop-Process']
+                kwargs = self._get_subprocess_kwargs()
+                subprocess.run(stop_cmd, **kwargs)
             else:
                 # On Unix-like systems, send SIGTERM to the process group
                 os.killpg(os.getpgid(self.recording_process.pid), signal.SIGTERM)
             
             # Wait for the process to terminate
-            self.recording_process.wait(timeout=10)
+            if self.recording_process and platform.system() != "Windows":
+                self.recording_process.wait(timeout=10)
             
             print(f"Screen recording stopped successfully. File saved: {self.recording_file_path}")
             
@@ -170,9 +161,13 @@ class ScreenRecorder:
         except subprocess.TimeoutExpired:
             print("Recording process did not terminate gracefully, forcing termination")
             if platform.system() == "Windows":
-                self.recording_process.kill()
+                # Force kill OBS processes
+                force_kill_cmd = ['powershell', '-Command', 'Get-Process obs64 -ErrorAction SilentlyContinue | Stop-Process -Force']
+                kwargs = self._get_subprocess_kwargs()
+                subprocess.run(force_kill_cmd, **kwargs)
             else:
-                os.killpg(os.getpgid(self.recording_process.pid), signal.SIGKILL)
+                if self.recording_process:
+                    os.killpg(os.getpgid(self.recording_process.pid), signal.SIGKILL)
             self.recording_process = None
             self.recording_file_path = None
             return False
@@ -189,18 +184,29 @@ class ScreenRecorder:
         Returns:
             True if recording is active, False otherwise
         """
-        if self.recording_process is None:
-            return False
-        
-        # Check if the process is still running
-        poll_result = self.recording_process.poll()
-        if poll_result is not None:
-            # Process has terminated
-            self.recording_process = None
-            self.recording_file_path = None
-            return False
-        
-        return True
+        if platform.system() == "Windows":
+            # For Windows/OBS, check if obs64 process is running
+            try:
+                check_cmd = ['powershell', '-Command', 'Get-Process obs64 -ErrorAction SilentlyContinue']
+                kwargs = self._get_subprocess_kwargs()
+                result = subprocess.run(check_cmd, **kwargs)
+                return result.returncode == 0
+            except Exception:
+                return False
+        else:
+            # For other platforms, check the process reference
+            if self.recording_process is None:
+                return False
+            
+            # Check if the process is still running
+            poll_result = self.recording_process.poll()
+            if poll_result is not None:
+                # Process has terminated
+                self.recording_process = None
+                self.recording_file_path = None
+                return False
+            
+            return True
 
 
 class StudyLogger:
@@ -251,6 +257,47 @@ class StudyLogger:
         """
         return self.screen_recorder.is_recording()
 
+    def _get_recording_subprocess_kwargs(self) -> Dict[str, Any]:
+        """
+        Get subprocess keyword arguments for recording processes.
+        
+        Returns:
+            Dictionary of keyword arguments for subprocess.Popen()
+        """
+        kwargs = {
+            'stdout': subprocess.PIPE,
+            'stderr': subprocess.PIPE
+        }
+        
+        # Platform-specific settings
+        if platform.system() == "Windows":
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            kwargs['shell'] = True
+        else:
+            kwargs['preexec_fn'] = os.setsid
+        
+        return kwargs
+    
+    def _get_subprocess_kwargs(self) -> Dict[str, Any]:
+        """
+        Get subprocess keyword arguments with platform-specific settings.
+        On Windows, prevents terminal windows from flickering by setting CREATE_NO_WINDOW flag.
+        
+        Returns:
+            Dictionary of keyword arguments for subprocess.run()
+        """
+        kwargs = {
+            'capture_output': True,
+            'text': True
+        }
+        
+        # On Windows, prevent terminal window from showing
+        if platform.system() == "Windows":
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            kwargs['shell'] = True  # Use shell=True to handle Windows paths correctly
+        
+        return kwargs
+    
     def _get_subprocess_kwargs(self) -> Dict[str, Any]:
         """
         Get subprocess keyword arguments with platform-specific settings.

@@ -200,16 +200,6 @@ def ux_questionnaire():
     
     ux_survey_url = os.getenv('UX_SURVEY_URL', '#')
     
-    # Stop screen recording when the study session ends
-    if is_recording_active():
-        recording_stopped = stop_session_recording()
-        if recording_stopped:
-            print(f"Screen recording stopped for participant {participant_id}, stage {study_stage}")
-        else:
-            print(f"Failed to stop screen recording for participant {participant_id}, stage {study_stage}")
-    else:
-        print(f"No active screen recording to stop for participant {participant_id}, stage {study_stage}")
-    
     # Commit any remaining code changes before leaving for the survey
     commit_message = "Session ended - proceeding to UX questionnaire"
     commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
@@ -273,6 +263,16 @@ def goodbye():
             async_mode=ASYNC_GITHUB_MODE
         )
         mark_route_as_logged(session, 'goodbye', study_stage)
+        
+        # Stop screen recording when participant reaches goodbye page (study completely finished)
+        if is_recording_active():
+            recording_stopped = stop_session_recording()
+            if recording_stopped:
+                print(f"✅ Screen recording stopped - participant {participant_id} reached goodbye page")
+            else:
+                print(f"❌ Failed to stop screen recording for participant {participant_id} at goodbye page")
+        else:
+            print(f"ℹ️ No active screen recording to stop for participant {participant_id} at goodbye page")
     
     return render_template('goodbye.jinja', 
                          participant_id=participant_id,
@@ -583,14 +583,6 @@ def timer_expired():
     # Mark timer as finished
     update_session_data(session, study_stage, timer_finished=True)
     
-    # Stop screen recording when timer expires
-    if is_recording_active():
-        recording_stopped = stop_session_recording()
-        if recording_stopped:
-            print(f"Screen recording stopped due to timer expiration for participant {participant_id}, stage {study_stage}")
-        else:
-            print(f"Failed to stop screen recording on timer expiration for participant {participant_id}, stage {study_stage}")
-    
     # Log timer expiration event
     session_data = get_session_data(session, study_stage)
     log_session_data = {
@@ -737,6 +729,14 @@ if __name__ == '__main__':
     
     # Repository will be cloned when user starts the session
     print("\nRepository will be cloned when user clicks 'Start Session'")
+    
+    # Start screen recording immediately when server starts
+    print("\nStarting screen recording at server startup...")
+    recording_started = start_session_recording(participant_id, study_stage, DEVELOPMENT_MODE)
+    if recording_started:
+        print(f"✅ Screen recording started for participant {participant_id}, stage {study_stage}")
+    else:
+        print(f"❌ Failed to start screen recording for participant {participant_id}, stage {study_stage}")
     
     # Set up graceful shutdown for async service and screen recording
     def cleanup_on_exit():
