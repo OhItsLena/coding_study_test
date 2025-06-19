@@ -147,6 +147,14 @@ class ScreenRecorder:
             print(f"Command: {' '.join(obs_cmd)}")
             
             recording_kwargs = self._get_recording_subprocess_kwargs()
+            
+            # Set working directory to OBS installation directory on Windows to fix locale issue
+            if system == "Windows":
+                obs_dir = os.path.dirname(obs_executable)
+                if os.path.exists(obs_dir):
+                    recording_kwargs['cwd'] = obs_dir
+                    print(f"Setting OBS working directory to: {obs_dir}")
+            
             self.recording_process = subprocess.Popen(obs_cmd, **recording_kwargs)
             print(f"OBS process started with PID: {self.recording_process.pid}")
             
