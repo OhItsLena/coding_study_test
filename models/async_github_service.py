@@ -122,6 +122,8 @@ class AsyncGitHubService:
                 return self._process_mark_stage_transition(operation)
             elif operation.operation_type == 'save_vscode_workspace_storage':
                 return self._process_save_vscode_workspace_storage(operation)
+            elif operation.operation_type == 'push_tutorial_code':
+                return self._process_push_tutorial_code(operation)
             else:
                 print(f"AsyncGitHubService: Unknown operation type: {operation.operation_type}")
                 return False
@@ -205,6 +207,22 @@ class AsyncGitHubService:
             print(f"AsyncGitHubService: VS Code workspace storage saving failed: {str(e)}")
             return False
     
+    def _process_push_tutorial_code(self, operation: GitHubOperation) -> bool:
+        """Process tutorial code push operation."""
+        try:
+            # Import repository manager to avoid circular imports
+            from .repository_manager import RepositoryManager
+            repo_manager = RepositoryManager(self.github_service)
+            return repo_manager.push_tutorial_code(
+                participant_id=operation.participant_id,
+                development_mode=operation.kwargs.get('development_mode'),
+                github_token=operation.kwargs.get('github_token'),
+                github_org=operation.kwargs.get('github_org')
+            )
+        except Exception as e:
+            print(f"AsyncGitHubService: Tutorial code push failed: {str(e)}")
+            return False
+
     # Public async methods
     def queue_log_route_visit(self, participant_id: str, route_name: str, 
                             development_mode: bool, study_stage: int,
@@ -284,6 +302,19 @@ class AsyncGitHubService:
         )
         self.operation_queue.put(operation)
         print(f"AsyncGitHubService: Queued VS Code workspace storage save for {participant_id}")
+    
+    def queue_push_tutorial_code(self, participant_id: str, development_mode: bool,
+                                github_token: Optional[str] = None, github_org: Optional[str] = None):
+        """Queue a tutorial code push operation."""
+        operation = GitHubOperation(
+            operation_type='push_tutorial_code',
+            participant_id=participant_id,
+            development_mode=development_mode,
+            github_token=github_token,
+            github_org=github_org
+        )
+        self.operation_queue.put(operation)
+        print(f"AsyncGitHubService: Queued tutorial code push for {participant_id}")
     
     def get_stats(self) -> Dict[str, Any]:
         """Get current operation statistics."""

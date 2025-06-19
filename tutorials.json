@@ -14,11 +14,12 @@
                 "try_it_note": "Copilot will automatically create the necessary files. You should see a basic calculator layout with buttons and a display."
                 },
                 {
-                "title": "Make It Functional with Edit Mode",
+                "title": "Add Functionality with the Agent",
                 "video": "tutorial_vibe2.gif",
-                "instruction": "Use Copilot Edit Mode to add functionality to the calculator.",
-                "example_prompt": "Make the calculator buttons update the display and calculate the result when I press =.",
-                "try_it_note": "Select your entire code and use Edit Mode to apply the change. Test the buttons in the browser."
+                "instruction": "Use Copilot Agent Mode to add functionality to the calculator.",
+                "example_prompt": "Show a press animation for the buttons when I hit the respective keyboard key.",
+                "try_it_note": "Select the calculator file as context and describe the change to the agent.",
+                "note": "Test the functionality in the browser before accepting. Undo the suggestion if you don't like it."
                 },
                 {
                 "title": "Brainstorm Features with Ask Mode",
@@ -32,16 +33,17 @@
                 "title": "Change the Design Based on Vibes",
                 "video": "tutorial_vibe4.gif",
                 "instruction": "Use a free browser-based AI tool (like Claude or Gemini) to improve the visual design.",
-                "example_prompt": "I don't like the design of this calculator app. It gives off a bad vibe. Make it fun and modern.",
-                "try_it_note": "Paste your code into a browser-based AI tool, describe the design you want, and bring the result back into your editor."
+                "example_prompt": "I don't like the design of this calculator app. It gives off a bad vibe. Make it old school and retro.",
+                "try_it_note": "Paste your code into a browser-based AI tool, describe the design you want, and bring the result back into your editor.",
+                "note": "You can also use the Copilot Chat to ask for design changes, but free browser-based AI tools are available to you as well."
                 },
                 {
                 "title": "Fix a Bug Using Copilot Agent",
                 "video": "tutorial_vibe5.gif",
                 "instruction": "Simulate a bug and ask Copilot Agent to fix it for you.",
                 "example_prompt": "When I press =, the calculator shows nothing. Can you fix it?",
-                "try_it_note": "Break a feature, describe the issue in Copilot Agent, and let it fix the code for you.",
-                "note": "Make sure to provide the neccessary context for the Agent."
+                "try_it_note": "Break a feature, describe the issue in a new Chat to Copilot Agent, and let it fix the code for you.",
+                "note": "It's helpful to start a new Chat for very different tasks. Make sure to provide the necessary context for the Agent."
                 }
             ],
             "wrapup": {
@@ -61,25 +63,26 @@
                 "try_it_note": "Start typing the function. Copilot will suggest completions as ghost text. Press Tab to accept and complete the function."
                 },
                 {
-                "title": "Use Inline Suggestions for Styling",
+                "title": "Use Inline Edit for Styling",
                 "video": "tutorial_ai2.gif",
-                "instruction": "Use Copilot's inline suggestions to adjust the calculator's layout and styling.",
-                "example_prompt": "/* Make the calculator layout centered and responsive */",
-                "try_it_note": "Write a comment describing the desired change in your CSS file and start the next line. Copilot will suggest CSS code you can accept."
+                "instruction": "Use Copilot's inline editing capabilities to adjust the calculator's layout and styling.",
+                "example_prompt": "Turn this page into dark mode with rounded buttons.",
+                "try_it_note": "Highlight the current CSS styling of the calculator. Select the sparkles ✨ to modify with Copilot. Review the suggestion before applying it."
                 },
                 {
                 "title": "Brainstorm Features with Ask Mode",
                 "video": "tutorial_ai3.gif",
                 "instruction": "Use Copilot Ask Mode to get ideas for new features for your calculator app.",
-                "example_prompt": "What are some additional features I could add to this calculator app?",
-                "try_it_note": "Use Ask Mode from the Command Palette or right-click menu. Review the suggestions and implement one you like with your own coding style, optionally using Copilot completions."
+                "example_prompt": "Let's brainstorm. What are some additional features I could add to this very simple calculator app?",
+                "try_it_note": "Use the Copilot Chat from the menu bar. Review the suggestions and optionally implement one you like with your own coding style, using Copilot completions."
                 },
                 {
-                "title": "Search StackOverflow for Help",
+                "title": "Search the Web for Help",
                 "video": "tutorial_ai4.gif",
                 "instruction": "When you're unsure how to implement a feature, use your browser to search for code examples and explanations.",
-                "example_prompt": "Search: 'JavaScript calculator keyboard input site:stackoverflow.com'",
-                "try_it_note": "Find a relevant code snippet or explanation on StackOverflow. Adapt and integrate it into your project manually."
+                "example_prompt": "Search: 'JavaScript keyboard input site:stackoverflow.com'",
+                "try_it_note": "Find a relevant code snippet or explanation on the web. Adapt and integrate it into your project manually.",
+                "note": "You can also use free browser-based AI tools like ChatGPT or Mistral Le Chat to help you."
                 }
             ],
             "wrapup": {

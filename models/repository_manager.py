@@ -493,6 +493,167 @@ class RepositoryManager:
             except Exception as e:
                 print(f"Warning: Failed to restore original working directory: {str(e)}")
 
+    def setup_tutorial_branch(self, participant_id: str, development_mode: bool,
+                             github_token: str, github_org: str) -> bool:
+        """
+        Set up tutorial branch for participant.
+        
+        Args:
+            participant_id: The participant ID
+            development_mode: Whether in development mode
+            github_token: GitHub authentication token
+            github_org: GitHub organization name
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            repo_path = self.get_repository_path(participant_id, development_mode)
+            
+            # Ensure repository exists first
+            if not os.path.exists(repo_path):
+                success = self.check_and_clone_repository(
+                    participant_id, development_mode, github_token, github_org
+                )
+                if not success:
+                    print(f"Failed to clone repository for tutorial setup")
+                    return False
+            
+            # Ensure git config is set up
+            if not self.ensure_git_config(repo_path, participant_id):
+                print(f"Failed to set up git config for tutorial")
+                return False
+                
+            # Create and checkout tutorial branch
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['cwd'] = repo_path
+            
+            # First, fetch all remote branches to ensure we have the latest refs
+            result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
+            if result.returncode != 0:
+                print(f"Warning: Failed to fetch from origin: {result.stderr}")
+            
+            # Check if tutorial branch exists locally
+            result = subprocess.run(['git', 'branch', '--list', 'tutorial'], **kwargs)
+            local_tutorial_exists = bool(result.stdout.strip())
+            
+            # Check if tutorial branch exists remotely
+            result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/tutorial'], **kwargs)
+            remote_tutorial_exists = bool(result.stdout.strip())
+            
+            if local_tutorial_exists:
+                # Local tutorial branch exists, just switch to it
+                result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
+                if result.returncode != 0:
+                    print(f"Failed to checkout existing tutorial branch: {result.stderr}")
+                    return False
+                print(f"Switched to existing local tutorial branch for {participant_id}")
+                
+                # If remote also exists, pull any updates
+                if remote_tutorial_exists:
+                    result = subprocess.run(['git', 'pull', 'origin', 'tutorial'], **kwargs)
+                    if result.returncode != 0:
+                        print(f"Warning: Failed to pull tutorial branch updates: {result.stderr}")
+                    else:
+                        print(f"Updated tutorial branch from remote for {participant_id}")
+                        
+            elif remote_tutorial_exists:
+                # Remote tutorial branch exists but not local, checkout from remote
+                result = subprocess.run(['git', 'checkout', '-b', 'tutorial', 'origin/tutorial'], **kwargs)
+                if result.returncode != 0:
+                    print(f"Failed to checkout tutorial branch from remote: {result.stderr}")
+                    return False
+                print(f"Checked out tutorial branch from remote for {participant_id}")
+                
+            else:
+                # Neither local nor remote tutorial branch exists, create new one
+                result = subprocess.run(['git', 'checkout', '-b', 'tutorial'], **kwargs)
+                if result.returncode != 0:
+                    print(f"Failed to create new tutorial branch: {result.stderr}")
+                    return False
+                print(f"Created new tutorial branch for {participant_id}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error setting up tutorial branch: {str(e)}")
+            return False
+
+    def push_tutorial_code(self, participant_id: str, development_mode: bool,
+                          github_token: str, github_org: str) -> bool:
+        """
+        Push tutorial code to remote tutorial branch.
+        
+        Args:
+            participant_id: The participant ID
+            development_mode: Whether in development mode
+            github_token: GitHub authentication token
+            github_org: GitHub organization name
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            repo_path = self.get_repository_path(participant_id, development_mode)
+            
+            if not os.path.exists(repo_path):
+                print(f"Repository does not exist for tutorial push: {repo_path}")
+                return False
+            
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['cwd'] = repo_path
+            
+            # Ensure we're on tutorial branch
+            result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
+            if result.returncode != 0:
+                print(f"Failed to check current branch: {result.stderr}")
+                return False
+                
+            current_branch = result.stdout.strip()
+            if current_branch != 'tutorial':
+                # Switch to tutorial branch
+                result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
+                if result.returncode != 0:
+                    print(f"Failed to switch to tutorial branch: {result.stderr}")
+                    return False
+            
+            # Check if there are any changes to commit
+            result = subprocess.run(['git', 'status', '--porcelain'], **kwargs)
+            if result.returncode != 0:
+                print(f"Failed to check git status: {result.stderr}")
+                return False
+                
+            has_changes = bool(result.stdout.strip())
+            
+            if has_changes:
+                # Add all changes
+                result = subprocess.run(['git', 'add', '.'], **kwargs)
+                if result.returncode != 0:
+                    print(f"Failed to add tutorial changes: {result.stderr}")
+                    return False
+                
+                # Commit changes
+                commit_message = f"Tutorial completion - {participant_id}"
+                result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
+                if result.returncode != 0:
+                    print(f"Failed to commit tutorial changes: {result.stderr}")
+                    return False
+                
+                print(f"Committed tutorial changes for {participant_id}")
+            
+            # Push to remote tutorial branch
+            result = subprocess.run(['git', 'push', 'origin', 'tutorial'], **kwargs)
+            if result.returncode != 0:
+                print(f"Failed to push tutorial branch: {result.stderr}")
+                return False
+            
+            print(f"Successfully pushed tutorial code for {participant_id}")
+            return True
+            
+        except Exception as e:
+            print(f"Error pushing tutorial code: {str(e)}")
+            return False
+
 
 class VSCodeManager:
     """
@@ -600,4 +761,79 @@ class VSCodeManager:
             return False
         except Exception as e:
             print(f"Error opening VS Code: {str(e)}")
+            return False
+
+    def open_vscode_with_tutorial(self, participant_id: str, development_mode: bool) -> bool:
+        """
+        Open VS Code with the participant's repository on the tutorial branch.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            development_mode: Whether running in development mode
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        # Get the repository path
+        repo_path = self.repository_manager.get_repository_path(participant_id, development_mode)
+        
+        # Normalize path
+        repo_path = os.path.normpath(repo_path)
+        
+        try:
+            # Check if repository exists
+            if not os.path.exists(repo_path):
+                print(f"Repository does not exist at: {repo_path}")
+                return False
+            
+            # Ensure we're on tutorial branch
+            kwargs = self.repository_manager._get_subprocess_kwargs()
+            kwargs['cwd'] = repo_path
+            
+            result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
+            if result.returncode != 0:
+                print(f"Failed to checkout tutorial branch: {result.stderr}")
+                return False
+            
+            # Try to open VS Code with the repository
+            print(f"Opening VS Code with tutorial branch: {repo_path}")
+            
+            # Use 'code' command to open VS Code with the repository folder
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 10
+            result = subprocess.run([
+                'code', repo_path
+            ], **kwargs)
+            
+            if result.returncode == 0:
+                print(f"Successfully opened VS Code with tutorial: {repo_path}")
+                return True
+            else:
+                print(f"Failed to open VS Code. Error: {result.stderr}")
+                # Try alternative method for macOS
+                try:
+                    kwargs = self._get_subprocess_kwargs()
+                    kwargs['timeout'] = 10
+                    result = subprocess.run([
+                        'open', '-a', 'Visual Studio Code', repo_path
+                    ], **kwargs)
+                    
+                    if result.returncode == 0:
+                        print(f"Successfully opened VS Code with tutorial using 'open' command: {repo_path}")
+                        return True
+                    else:
+                        print(f"Failed to open VS Code with 'open' command. Error: {result.stderr}")
+                        return False
+                except Exception as e:
+                    print(f"Error trying 'open' command: {str(e)}")
+                    return False
+                
+        except subprocess.TimeoutExpired:
+            print("VS Code open operation timed out")
+            return False
+        except FileNotFoundError:
+            print("VS Code ('code' command) not found in PATH. Please ensure VS Code is installed and the 'code' command is available.")
+            return False
+        except Exception as e:
+            print(f"Error opening VS Code with tutorial: {str(e)}")
             return False

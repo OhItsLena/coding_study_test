@@ -11,7 +11,8 @@ from services import (
     load_tutorials, get_tutorial_by_condition,
     test_github_connectivity_async, stop_async_github_service, wait_for_async_github_completion,
     save_vscode_workspace_storage, save_vscode_workspace_storage_async,
-    start_session_recording, stop_session_recording, is_recording_active
+    start_session_recording, stop_session_recording, is_recording_active,
+    setup_tutorial_branch, open_vscode_with_tutorial, push_tutorial_code
 )
 
 # Load environment variables from .env file
@@ -298,9 +299,24 @@ def tutorial():
             study_stage=study_stage,
             session_data=session_data,
             github_token=GITHUB_TOKEN,
-            github_org=GITHUB_ORG
+            github_org=GITHUB_ORG,
+            async_mode=ASYNC_GITHUB_MODE
         )
         mark_route_as_logged(session, 'tutorial', study_stage)
+        
+        # Set up tutorial branch and open VS Code (only on first visit)
+        print(f"Setting up tutorial branch for {participant_id}")
+        tutorial_setup_success = setup_tutorial_branch(
+            participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG
+        )
+        
+        if tutorial_setup_success:
+            print(f"Opening VS Code with tutorial for {participant_id}")
+            vscode_success = open_vscode_with_tutorial(participant_id, DEVELOPMENT_MODE)
+            if not vscode_success:
+                print(f"Failed to open VS Code with tutorial for {participant_id}")
+        else:
+            print(f"Failed to set up tutorial branch for {participant_id}")
     
     # Stage 2 participants should skip the tutorial
     if study_stage == 2:
@@ -403,6 +419,14 @@ def task():
             async_mode=ASYNC_GITHUB_MODE
         )
         mark_route_as_logged(session, 'task', study_stage)
+        
+        # Push tutorial code when transitioning from tutorial to task (only for stage 1)
+        if study_stage == 1:
+            print(f"Pushing tutorial code for {participant_id} before starting coding task")
+            push_tutorial_code(
+                participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, 
+                async_mode=ASYNC_GITHUB_MODE
+            )
     
     # Initialize timer if not started yet
     if timer_start is None:
