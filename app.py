@@ -433,12 +433,8 @@ def task():
         timer_start = time.time()
         update_session_data(session, study_stage, timer_start=timer_start)
         
-        # Start screen recording when the coding session begins
-        recording_started = start_session_recording(participant_id, study_stage, DEVELOPMENT_MODE)
-        if recording_started:
-            print(f"Screen recording started for participant {participant_id}, stage {study_stage}")
-        else:
-            print(f"Failed to start screen recording for participant {participant_id}, stage {study_stage}")
+        # Recording already started at server startup, no need to start again
+        print(f"Coding session timer started for participant {participant_id}, stage {study_stage}")
         
         # Make an initial commit to mark the start of this coding session
         commit_message = f"Started coding session - Condition: {coding_condition}"
@@ -730,7 +726,7 @@ if __name__ == '__main__':
     # Repository will be cloned when user starts the session
     print("\nRepository will be cloned when user clicks 'Start Session'")
     
-    # Start screen recording immediately when server starts
+    # Start screen recording when server starts to capture the entire participant session
     print("\nStarting screen recording at server startup...")
     recording_started = start_session_recording(participant_id, study_stage, DEVELOPMENT_MODE)
     if recording_started:
@@ -751,4 +747,4 @@ if __name__ == '__main__':
     atexit.register(cleanup_on_exit)
     print("Async GitHub service and screen recording shutdown handlers registered")
 
-    app.run(host='127.0.0.1', port=8085, debug=True)
+    app.run(host='127.0.0.1', port=8085, debug=False, use_reloader=False)

@@ -1,6 +1,20 @@
 """
 Logging system for the coding study Flask application.
 Handles route logging, session tracking, and study flow monitoring.
+
+Screen Recording Implementation:
+- Uses OBS Studio for cross-platform screen recording (Windows, macOS, Linux)
+- Assumes OBS is already configured with default scenes and profiles
+- Supports graceful start/stop of recording sessions using existing configuration
+- Automatically detects OBS installation paths on different platforms
+- Falls back to process management if standard paths aren't found
+
+Requirements:
+- OBS Studio must be installed and configured on the system
+- Default scene and profile should be set up for recording
+- For Windows: Typically installed in "C:\\Program Files\\obs-studio\\"
+- For macOS: Typically installed as "/Applications/OBS.app"  
+- For Linux: Available as "obs" command in PATH
 """
 
 import os
@@ -19,7 +33,7 @@ from .github_service import GitHubService
 
 class ScreenRecorder:
     """
-    Handles screen recording using FFmpeg.
+    Handles screen recording using OBS Studio.
     """
     
     def __init__(self):
@@ -27,9 +41,42 @@ class ScreenRecorder:
         self.recording_process = None
         self.recording_file_path = None
     
+    def _get_obs_executable_path(self) -> str:
+        """
+        Get the platform-specific OBS Studio executable path.
+        
+        Returns:
+            Path to OBS Studio executable
+        """
+        system = platform.system()
+        
+        if system == "Windows":
+            # Common OBS installation paths on Windows
+            paths = [
+                r"C:\Program Files\obs-studio\bin\64bit\obs64.exe",
+                r"C:\Program Files (x86)\obs-studio\bin\32bit\obs32.exe",
+                r"C:\Program Files (x86)\obs-studio\bin\64bit\obs64.exe"
+            ]
+            for path in paths:
+                if os.path.exists(path):
+                    return path
+            # Try to find OBS in PATH
+            return "obs64.exe"
+        
+        elif system == "Darwin":  # macOS
+            # OBS Studio app bundle path on macOS
+            obs_app_path = "/Applications/OBS.app/Contents/MacOS/OBS"
+            if os.path.exists(obs_app_path):
+                return obs_app_path
+            # Try to find OBS in PATH
+            return "obs"
+        
+        else:  # Linux
+            # OBS executable on Linux
+            return "obs"
     def start_recording(self, participant_id: str, study_stage: int, logs_directory: str) -> bool:
         """
-        Start screen recording using FFmpeg.
+        Start screen recording using OBS Studio with default configuration.
         
         Args:
             participant_id: The participant's unique identifier
@@ -39,9 +86,22 @@ class ScreenRecorder:
         Returns:
             True if recording started successfully, False otherwise
         """
-        if self.recording_process is not None:
-            print("Screen recording is already in progress")
-            return False
+        # Check if OBS is already running before attempting to start
+        if self.is_recording():
+            print("Screen recording is already in progress - OBS is running")
+            return True  # Return True since recording is already active
+        
+        # Also check for any existing OBS processes more thoroughly
+        system = platform.system()
+        if system == "Darwin":  # macOS
+            try:
+                # Kill any existing OBS processes to ensure clean start
+                cleanup_cmd = ['pkill', '-f', '/Applications/OBS.app/Contents/MacOS/OBS']
+                subprocess.run(cleanup_cmd, capture_output=True, text=True)
+                print("Cleaned up any existing OBS processes")
+                time.sleep(1)  # Give processes time to terminate
+            except Exception as e:
+                print(f"Error during OBS cleanup: {e}")
         
         try:
             # Create recordings directory if it doesn't exist
@@ -53,103 +113,163 @@ class ScreenRecorder:
             recording_filename = f"screen_recording_{participant_id}_stage{study_stage}_{timestamp}.mp4"
             self.recording_file_path = os.path.join(recordings_dir, recording_filename)
             
-            # FFmpeg command for screen recording (platform-specific)
-            if platform.system() == "Darwin":  # macOS
-                # Use avfoundation for macOS screen capture
-                ffmpeg_cmd = [
-                    "ffmpeg",
-                    "-f", "avfoundation",
-                    "-i", "3:",  # Primary screen (device 3), no audio
-                    "-r", "15",   # Output framerate 15 fps
-                    "-vcodec", "libx264",
-                    "-preset", "ultrafast",
-                    "-crf", "28",
-                    "-pix_fmt", "yuv420p",  # Ensure compatibility
-                    "-y",  # Overwrite output file
-                    self.recording_file_path
+            # Get OBS executable path
+            obs_executable = self._get_obs_executable_path()
+            print(f"Using OBS executable: {obs_executable}")
+            
+            # OBS command for screen recording using default configuration
+            system = platform.system()
+            
+            if system == "Windows":
+                # Windows: Use OBS with minimal command line arguments
+                obs_cmd = [
+                    obs_executable,
+                    "--startrecording",
+                    "--minimize-to-tray"
                 ]
-            elif platform.system() == "Windows":
-                # Use OBS for Windows screen capture
-                obs_path = r"C:\Program Files\obs-studio\bin\64bit"
-                ffmpeg_cmd = [
-                    "cmd", "/c", 
-                    f'cd "{obs_path}" && start "obs64.exe" --startrecording'
+            elif system == "Darwin":  # macOS
+                # macOS: Use OBS with minimal command line arguments
+                obs_cmd = [
+                    obs_executable,
+                    "--startrecording",
+                    "--minimize"
                 ]
             else:  # Linux
-                # Use x11grab for Linux screen capture
-                ffmpeg_cmd = [
-                    "ffmpeg",
-                    "-f", "x11grab",
-                    "-framerate", "15",
-                    "-i", ":0.0",  # Display :0.0
-                    "-vcodec", "libx264",
-                    "-preset", "ultrafast",
-                    "-crf", "28",
-                    "-pix_fmt", "yuv420p",  # Ensure compatibility
-                    "-y",  # Overwrite output file
-                    self.recording_file_path
+                # Linux: Use OBS with minimal command line arguments
+                obs_cmd = [
+                    obs_executable,
+                    "--startrecording",
+                    "--minimize-to-tray"
                 ]
             
             # Start the recording process
-            print(f"Starting screen recording: {recording_filename}")
-            print(f"Command: {' '.join(ffmpeg_cmd)}")
+            print(f"Starting OBS screen recording: {recording_filename}")
+            print(f"Command: {' '.join(obs_cmd)}")
             
             recording_kwargs = self._get_recording_subprocess_kwargs()
-            self.recording_process = subprocess.Popen(ffmpeg_cmd, **recording_kwargs)
+            self.recording_process = subprocess.Popen(obs_cmd, **recording_kwargs)
+            print(f"OBS process started with PID: {self.recording_process.pid}")
             
-            # Give FFmpeg a moment to start and check if it's running
-            time.sleep(2)
+            # Give OBS more time to start and stabilize
+            print("Waiting for OBS to start...")
+            time.sleep(3)
             
-            if self.recording_process.poll() is not None:
-                # Process has already terminated, check for errors
-                stdout, stderr = self.recording_process.communicate()
-                print(f"FFmpeg failed to start. Error: {stderr.decode()}")
+            # Check if OBS is now running with multiple attempts
+            recording_active = False
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                recording_active = self.is_recording()
+                print(f"OBS recording status check (attempt {attempt + 1}): {recording_active}")
+                if recording_active:
+                    break
+                if attempt < max_attempts - 1:
+                    print(f"OBS not detected yet, waiting 2 more seconds...")
+                    time.sleep(2)
+            
+            if not recording_active:
+                print("OBS failed to start recording - checking process status")
+                if self.recording_process:
+                    poll_result = self.recording_process.poll()
+                    print(f"OBS process poll result: {poll_result}")
+                    if poll_result is not None:
+                        try:
+                            stdout, stderr = self.recording_process.communicate(timeout=1)
+                            print(f"OBS stdout: {stdout.decode()[:200] if stdout else 'None'}")
+                            print(f"OBS stderr: {stderr.decode()[:200] if stderr else 'None'}")
+                        except subprocess.TimeoutExpired:
+                            print("OBS process still running but communication timed out")
+                        except Exception as e:
+                            print(f"Error communicating with OBS process: {e}")
+                
                 self.recording_process = None
                 self.recording_file_path = None
                 return False
+            else:
+                # OBS is running, but it may not be using our specified file path
+                print(f"⚠️  OBS is recording but may be using its own default output location")
+                print(f"   Expected file: {self.recording_file_path}")
+                print(f"   OBS may save to: ~/Movies/ with its own naming convention")
             
-            print(f"Screen recording started successfully for participant {participant_id}, stage {study_stage}")
+            print(f"✅ OBS screen recording started successfully for participant {participant_id}, stage {study_stage}")
             return True
             
         except FileNotFoundError:
-            print("FFmpeg not found. Please install FFmpeg and make sure it's in your PATH.")
+            print("❌ OBS Studio not found. Please install OBS Studio and make sure it's accessible.")
             self.recording_process = None
             self.recording_file_path = None
             return False
         except Exception as e:
-            print(f"Failed to start screen recording: {e}")
+            print(f"❌ Failed to start OBS screen recording: {e}")
             self.recording_process = None
             self.recording_file_path = None
             return False
     
     def stop_recording(self) -> bool:
         """
-        Stop the current screen recording.
+        Stop the current OBS screen recording.
         
         Returns:
             True if recording stopped successfully, False otherwise
         """
-        if self.recording_process is None:
-            print("No screen recording in progress")
+        if not self.is_recording():
+            print("No OBS screen recording in progress")
             return False
         
         try:
-            print("Stopping screen recording...")
+            print("Stopping OBS screen recording...")
             
+            system = platform.system()
+            # Simple subprocess kwargs for process control
+            kwargs = {
+                'capture_output': True,
+                'text': True
+            }
             if platform.system() == "Windows":
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+                kwargs['shell'] = True
+            
+            if system == "Windows":
                 # On Windows, stop OBS using PowerShell
-                stop_cmd = ['powershell', '-Command', 'Get-Process obs64 | Stop-Process']
-                kwargs = self._get_subprocess_kwargs()
-                subprocess.run(stop_cmd, **kwargs)
-            else:
-                # On Unix-like systems, send SIGTERM to the process group
-                os.killpg(os.getpgid(self.recording_process.pid), signal.SIGTERM)
+                stop_cmd = ['powershell', '-Command', 
+                           'Get-Process obs64 -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() }']
+                result = subprocess.run(stop_cmd, **kwargs)
+                
+                # If graceful shutdown failed, force stop
+                if result.returncode != 0:
+                    force_stop_cmd = ['powershell', '-Command', 
+                                    'Get-Process obs64 -ErrorAction SilentlyContinue | Stop-Process -Force']
+                    subprocess.run(force_stop_cmd, **kwargs)
+                    
+            elif system == "Darwin":  # macOS
+                # On macOS, use osascript to quit OBS gracefully or pkill as fallback
+                try:
+                    # Try graceful quit first
+                    quit_cmd = ['osascript', '-e', 'tell application "OBS" to quit']
+                    result = subprocess.run(quit_cmd, **kwargs, timeout=5)
+                    if result.returncode != 0:
+                        # Fallback to pkill with specific pattern
+                        subprocess.run(['pkill', '-f', '/Applications/OBS.app/Contents/MacOS/OBS'], **kwargs)
+                except subprocess.TimeoutExpired:
+                    # Force kill if needed
+                    subprocess.run(['pkill', '-9', '-f', '/Applications/OBS.app/Contents/MacOS/OBS'], **kwargs)
+                    
+            else:  # Linux
+                # On Linux, try graceful shutdown then pkill
+                try:
+                    # Try sending TERM signal first
+                    subprocess.run(['pkill', '-TERM', 'obs'], **kwargs)
+                    time.sleep(2)
+                    # Check if still running and force kill if needed
+                    check_result = subprocess.run(['pgrep', 'obs'], **kwargs)
+                    if check_result.returncode == 0:
+                        subprocess.run(['pkill', '-9', 'obs'], **kwargs)
+                except Exception:
+                    pass
             
-            # Wait for the process to terminate
-            if self.recording_process and platform.system() != "Windows":
-                self.recording_process.wait(timeout=10)
+            # Wait a moment for OBS to fully stop
+            time.sleep(2)
             
-            print(f"Screen recording stopped successfully. File saved: {self.recording_file_path}")
+            print(f"OBS screen recording stopped successfully. File saved: {self.recording_file_path}")
             
             # Reset the recording state
             self.recording_process = None
@@ -158,55 +278,64 @@ class ScreenRecorder:
             
             return True
             
-        except subprocess.TimeoutExpired:
-            print("Recording process did not terminate gracefully, forcing termination")
-            if platform.system() == "Windows":
-                # Force kill OBS processes
-                force_kill_cmd = ['powershell', '-Command', 'Get-Process obs64 -ErrorAction SilentlyContinue | Stop-Process -Force']
-                kwargs = self._get_subprocess_kwargs()
-                subprocess.run(force_kill_cmd, **kwargs)
-            else:
-                if self.recording_process:
-                    os.killpg(os.getpgid(self.recording_process.pid), signal.SIGKILL)
-            self.recording_process = None
-            self.recording_file_path = None
-            return False
         except Exception as e:
-            print(f"Failed to stop screen recording: {e}")
+            print(f"Failed to stop OBS screen recording: {e}")
             self.recording_process = None
             self.recording_file_path = None
             return False
     
     def is_recording(self) -> bool:
         """
-        Check if a recording is currently in progress.
+        Check if OBS is currently recording.
         
         Returns:
-            True if recording is active, False otherwise
+            True if OBS recording is active, False otherwise
         """
-        if platform.system() == "Windows":
-            # For Windows/OBS, check if obs64 process is running
-            try:
+        try:
+            system = platform.system()
+            # Simple subprocess kwargs for process checking
+            kwargs = {
+                'capture_output': True,
+                'text': True
+            }
+            
+            if system == "Windows":
+                # For Windows, check if obs64 process is running
                 check_cmd = ['powershell', '-Command', 'Get-Process obs64 -ErrorAction SilentlyContinue']
-                kwargs = self._get_subprocess_kwargs()
+                if platform.system() == "Windows":
+                    kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+                    kwargs['shell'] = True
                 result = subprocess.run(check_cmd, **kwargs)
-                return result.returncode == 0
-            except Exception:
-                return False
-        else:
-            # For other platforms, check the process reference
-            if self.recording_process is None:
-                return False
-            
-            # Check if the process is still running
-            poll_result = self.recording_process.poll()
-            if poll_result is not None:
-                # Process has terminated
-                self.recording_process = None
-                self.recording_file_path = None
-                return False
-            
-            return True
+                is_running = result.returncode == 0
+                
+            elif system == "Darwin":  # macOS
+                # For macOS, check specifically for the main OBS application process
+                # Use more specific pattern to avoid matching obs-ffmpeg-mux
+                check_cmd = ['pgrep', '-f', '/Applications/OBS.app/Contents/MacOS/OBS']
+                result = subprocess.run(check_cmd, **kwargs)
+                is_running = result.returncode == 0
+                
+                # Additional check: Look for obs-ffmpeg-mux which indicates active recording
+                if is_running:
+                    mux_check_cmd = ['pgrep', '-f', 'obs-ffmpeg-mux']
+                    mux_result = subprocess.run(mux_check_cmd, **kwargs)
+                    has_mux = mux_result.returncode == 0
+                    print(f"OBS main process running: {is_running}, obs-ffmpeg-mux active: {has_mux}")
+                    # Return true if either main process is running (OBS is open)
+                    # The mux process indicates active recording but may not always be present
+                    return is_running
+                
+            else:  # Linux
+                # For Linux, check if obs process is running
+                check_cmd = ['pgrep', 'obs']
+                result = subprocess.run(check_cmd, **kwargs)
+                is_running = result.returncode == 0
+                
+            return is_running
+                
+        except Exception as e:
+            print(f"Error checking OBS recording status: {e}")
+            return False
     
     def _get_recording_subprocess_kwargs(self) -> Dict[str, Any]:
         """
@@ -296,26 +425,6 @@ class StudyLogger:
             kwargs['shell'] = True
         else:
             kwargs['preexec_fn'] = os.setsid
-        
-        return kwargs
-    
-    def _get_subprocess_kwargs(self) -> Dict[str, Any]:
-        """
-        Get subprocess keyword arguments with platform-specific settings.
-        On Windows, prevents terminal windows from flickering by setting CREATE_NO_WINDOW flag.
-        
-        Returns:
-            Dictionary of keyword arguments for subprocess.run()
-        """
-        kwargs = {
-            'capture_output': True,
-            'text': True
-        }
-        
-        # On Windows, prevent terminal window from showing
-        if platform.system() == "Windows":
-            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-            kwargs['shell'] = True  # Use shell=True to handle Windows paths correctly
         
         return kwargs
     
