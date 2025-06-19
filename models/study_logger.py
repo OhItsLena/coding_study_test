@@ -208,23 +208,24 @@ class ScreenRecorder:
             
             return True
     
-    def _get_subprocess_kwargs(self) -> Dict[str, Any]:
+    def _get_recording_subprocess_kwargs(self) -> Dict[str, Any]:
         """
-        Get subprocess keyword arguments with platform-specific settings.
-        On Windows, prevents terminal windows from flickering by setting CREATE_NO_WINDOW flag.
+        Get subprocess keyword arguments for recording processes.
         
         Returns:
-            Dictionary of keyword arguments for subprocess.run()
+            Dictionary of keyword arguments for subprocess.Popen()
         """
         kwargs = {
-            'capture_output': True,
-            'text': True
+            'stdout': subprocess.PIPE,
+            'stderr': subprocess.PIPE
         }
         
-        # On Windows, prevent terminal window from showing
+        # Platform-specific settings
         if platform.system() == "Windows":
             kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-            kwargs['shell'] = True  # Use shell=True to handle Windows paths correctly
+            kwargs['shell'] = True
+        else:
+            kwargs['preexec_fn'] = os.setsid
         
         return kwargs
 
