@@ -295,15 +295,65 @@ class RepositoryManager:
                     return False
                     
             else:
-                # Neither local nor remote exist - create new branch
+                # Neither local nor remote exist - create new branch from appropriate base
                 print(f"Creating new branch: {branch_name}")
+                
                 kwargs = self._get_subprocess_kwargs()
                 kwargs['timeout'] = 10
-                result = subprocess.run(['git', 'checkout', '-b', branch_name], **kwargs)
+                
+                if study_stage == 1:
+                    # Stage-1 should be created from main/master
+                    # Check if main branch exists (newer repos use 'main')
+                    result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/main'], **kwargs)
+                    base_branch = 'main' if 'origin/main' in result.stdout else 'master'
+                    base_ref = f'origin/{base_branch}'
+                    
+                    # Fetch the latest main/master branch
+                    result = subprocess.run(['git', 'fetch', 'origin', base_branch], **kwargs)
+                    if result.returncode != 0:
+                        print(f"Warning: Failed to fetch {base_branch} branch. Error: {result.stderr}")
+                    
+                    print(f"Creating {branch_name} from {base_branch} branch")
+                    
+                elif study_stage == 2:
+                    # Stage-2 should be created from stage-1
+                    stage1_branch = 'stage-1'
+                    
+                    # Check if stage-1 exists locally or remotely
+                    result = subprocess.run(['git', 'branch', '--list', stage1_branch], **kwargs)
+                    stage1_exists_locally = stage1_branch in result.stdout
+                    
+                    result = subprocess.run(['git', 'branch', '-r', '--list', f'origin/{stage1_branch}'], **kwargs)
+                    stage1_exists_remotely = f'origin/{stage1_branch}' in result.stdout
+                    
+                    if stage1_exists_remotely:
+                        # Fetch latest stage-1 from remote
+                        result = subprocess.run(['git', 'fetch', 'origin', stage1_branch], **kwargs)
+                        if result.returncode != 0:
+                            print(f"Warning: Failed to fetch {stage1_branch} branch. Error: {result.stderr}")
+                        base_ref = f'origin/{stage1_branch}'
+                    elif stage1_exists_locally:
+                        base_ref = stage1_branch
+                    else:
+                        print(f"Error: {stage1_branch} branch does not exist. Cannot create {branch_name}")
+                        return False
+                    
+                    print(f"Creating {branch_name} from {stage1_branch} branch")
+                    
+                else:
+                    print(f"Error: Unsupported study stage: {study_stage}")
+                    return False
+                
+                # Create new branch from the determined base
+                kwargs = self._get_subprocess_kwargs()
+                kwargs['timeout'] = 15
+                result = subprocess.run(['git', 'checkout', '-b', branch_name, base_ref], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to create branch {branch_name}. Error: {result.stderr}")
+                    print(f"Failed to create branch {branch_name} from {base_ref}. Error: {result.stderr}")
                     return False
+                
+                print(f"Successfully created {branch_name} from {base_ref}")
             
             print(f"Successfully ensured branch {branch_name} is active for stage {study_stage}")
             return True
