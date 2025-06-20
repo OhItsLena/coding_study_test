@@ -747,4 +747,4 @@ if __name__ == '__main__':
     atexit.register(cleanup_on_exit)
     print("Async GitHub service and screen recording shutdown handlers registered")
 
-    app.run(host='127.0.0.1', port=8085, debug=False, use_reloader=False)
+    app.run(debug=DEVELOPMENT_MODE, host='127.0.0.1', port=39765)

@@ -487,6 +487,7 @@ class StudyLogger:
         """
         Ensure the logging repository exists and is set up with a logging branch.
         Creates a separate repository/directory for logs to keep them hidden from participants.
+        Handles remote synchronization to avoid conflicts.
         
         Args:
             participant_id: The participant's unique identifier
@@ -542,51 +543,167 @@ class StudyLogger:
                 
                 print(f"Initialized logging repository at: {logs_path}")
             
-            # Ensure we're on the logging branch
+            # Ensure we're in the logs directory
             os.chdir(logs_path)
             
-            # Check if logging branch exists
-            kwargs = self._get_subprocess_kwargs()
-            kwargs["timeout"] = 10
-            result = subprocess.run([
-                'git', 'branch', '--list', 'logging'
-            ], **kwargs)
+            # Set up remote if we have authentication and it doesn't exist
+            if github_token:
+                self._setup_logging_remote(participant_id, github_token, github_org)
             
-            if 'logging' not in result.stdout:
-                # Create logging branch
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run([
-                    'git', 'checkout', '-b', 'logging'
-                ], **kwargs)
-                
-                if result.returncode != 0:
-                    print(f"Failed to create logging branch. Error: {result.stderr}")
-                    return False
-                
-                print("Created logging branch")
-            else:
-                # Switch to logging branch
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run([
-                    'git', 'checkout', 'logging'
-                ], **kwargs)
-                
-                if result.returncode != 0:
-                    print(f"Failed to checkout logging branch. Error: {result.stderr}")
-                    return False
-            
-            return True
+            # Ensure logging branch with remote synchronization
+            return self._ensure_logging_branch_with_sync()
             
         except Exception as e:
-            print(f"Error setting up logging repository: {str(e)}")
+            print(f"Error ensuring logging repository: {str(e)}")
             return False
         finally:
             try:
                 os.chdir(original_cwd)
             except Exception as e:
-                print(f"Warning: Failed to restore working directory: {str(e)}")
+                print(f"Warning: Failed to restore original working directory: {str(e)}")
+    
+    def _setup_logging_remote(self, participant_id: str, github_token: str, github_org: str) -> bool:
+        """
+        Set up the remote for the logging repository.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            github_token: GitHub personal access token
+            github_org: GitHub organization name
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            repo_name = f"study-{participant_id}"
+            authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
+            
+            # Check if remote exists
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 5
+            result = subprocess.run(['git', 'remote'], **kwargs)
+            
+            if 'origin' not in result.stdout:
+                # Add remote
+                kwargs["timeout"] = 10
+                result = subprocess.run(['git', 'remote', 'add', 'origin', authenticated_url], **kwargs)
+                if result.returncode != 0:
+                    print(f"Warning: Failed to add remote: {result.stderr}")
+                    return False
+            else:
+                # Update remote URL
+                kwargs["timeout"] = 10
+                result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
+                if result.returncode != 0:
+                    print(f"Warning: Failed to set remote URL: {result.stderr}")
+                    return False
+                    
+            return True
+            
+        except Exception as e:
+            print(f"Error setting up logging remote: {str(e)}")
+            return False
+    
+    def _ensure_logging_branch_with_sync(self) -> bool:
+        """
+        Ensure logging branch exists with proper remote synchronization.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # First, try to fetch from remote to get latest refs
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 15
+            result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
+            if result.returncode != 0:
+                print(f"Warning: Failed to fetch from remote (may not exist yet): {result.stderr}")
+            
+            # Check if logging branch exists locally
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 10
+            result = subprocess.run(['git', 'branch', '--list', 'logging'], **kwargs)
+            local_logging_exists = 'logging' in result.stdout
+            
+            # Check if logging branch exists remotely
+            kwargs = self._get_subprocess_kwargs()
+            kwargs["timeout"] = 10
+            result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/logging'], **kwargs)
+            remote_logging_exists = 'origin/logging' in result.stdout
+            
+            if local_logging_exists and remote_logging_exists:
+                # Both exist - checkout local and pull updates
+                print("Logging branch exists both locally and remotely - syncing")
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 10
+                result = subprocess.run(['git', 'checkout', 'logging'], **kwargs)
+                
+                if result.returncode != 0:
+                    print(f"Failed to checkout logging branch: {result.stderr}")
+                    return False
+                
+                # Pull updates with merge strategy for logs (append-only)
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 20
+                result = subprocess.run(['git', 'pull', 'origin', 'logging'], **kwargs)
+                
+                if result.returncode != 0:
+                    print(f"Warning: Failed to pull logging branch updates: {result.stderr}")
+                    # Try to resolve with merge strategy favoring remote (logs should not conflict)
+                    result = subprocess.run(['git', 'merge', '--abort'], **kwargs)
+                    result = subprocess.run([
+                        'git', 'pull', 'origin', 'logging', '--strategy=recursive', '--strategy-option=theirs'
+                    ], **kwargs)
+                    
+                    if result.returncode != 0:
+                        print(f"Failed to resolve logging branch conflicts: {result.stderr}")
+                        return False
+                    else:
+                        print("Resolved logging branch conflicts favoring remote")
+                else:
+                    print("Successfully synchronized logging branch with remote")
+                    
+            elif local_logging_exists:
+                # Only local exists - just switch to it
+                print("Switching to existing local logging branch")
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 10
+                result = subprocess.run(['git', 'checkout', 'logging'], **kwargs)
+                
+                if result.returncode != 0:
+                    print(f"Failed to checkout logging branch: {result.stderr}")
+                    return False
+                    
+            elif remote_logging_exists:
+                # Only remote exists - create local tracking branch
+                print("Creating local logging branch tracking remote origin/logging")
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 15
+                result = subprocess.run([
+                    'git', 'checkout', '-b', 'logging', 'origin/logging'
+                ], **kwargs)
+                
+                if result.returncode != 0:
+                    print(f"Failed to create tracking logging branch: {result.stderr}")
+                    return False
+                    
+            else:
+                # Neither exists - create new logging branch
+                print("Creating new logging branch")
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 10
+                result = subprocess.run(['git', 'checkout', '-b', 'logging'], **kwargs)
+                
+                if result.returncode != 0:
+                    print(f"Failed to create logging branch: {result.stderr}")
+                    return False
+            
+            print("Successfully ensured logging branch is active and synchronized")
+            return True
+            
+        except Exception as e:
+            print(f"Error ensuring logging branch: {str(e)}")
+            return False
     
     def log_route_visit(self, participant_id: str, route_name: str, development_mode: bool,
                       study_stage: int, session_data: Optional[Dict] = None,
@@ -698,6 +815,7 @@ class StudyLogger:
                           github_token: str, github_org: str) -> bool:
         """
         Push logs to remote repository on the logging branch.
+        Uses enhanced retry logic and conflict resolution.
         
         Args:
             participant_id: The participant's unique identifier
@@ -714,35 +832,13 @@ class StudyLogger:
         try:
             os.chdir(logs_path)
             
-            # For now, we'll use the same repository structure but on logging branch
-            # In production, you might want to set up a separate logs repository
-            repo_name = f"study-{participant_id}"
-            authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
-            
-            # Check if remote exists
-            kwargs = self._get_subprocess_kwargs()
-            kwargs["timeout"] = 5
-            result = subprocess.run(['git', 'remote'], **kwargs)
-            
-            if 'origin' not in result.stdout:
-                # Add remote
-                kwargs["timeout"] = 10
-                subprocess.run(['git', 'remote', 'add', 'origin', authenticated_url], **kwargs)
-            else:
-                # Update remote URL
-                kwargs["timeout"] = 10
-                subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
-            
-            # Push logging branch
-            kwargs["timeout"] = 30
-            result = subprocess.run(['git', 'push', 'origin', 'logging'], **kwargs)
-            
-            if result.returncode == 0:
-                print(f"Successfully pushed logs to remote for participant {participant_id}")
-                return True
-            else:
-                print(f"Failed to push logs to remote. Error: {result.stderr}")
+            # Ensure logging repository and branch are properly set up with sync
+            if not self.ensure_logging_repository(participant_id, development_mode, github_token, github_org):
+                print(f"Failed to ensure logging repository for push")
                 return False
+            
+            # Use enhanced push with retry logic for logging
+            return self._push_logs_with_retry(participant_id, github_token, github_org)
                 
         except Exception as e:
             print(f"Error pushing logs to remote: {str(e)}")
@@ -752,6 +848,129 @@ class StudyLogger:
                 os.chdir(original_cwd)
             except Exception as e:
                 print(f"Warning: Failed to restore original working directory: {str(e)}")
+    
+    def _push_logs_with_retry(self, participant_id: str, github_token: str, 
+                             github_org: str, max_retries: int = 3) -> bool:
+        """
+        Push logs with retry logic and conflict resolution.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            github_token: GitHub personal access token
+            github_org: GitHub organization name
+            max_retries: Maximum number of retry attempts
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        for attempt in range(max_retries):
+            try:
+                # Set up the authenticated remote URL
+                repo_name = f"study-{participant_id}"
+                authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
+                
+                # Update the origin URL to use authentication
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 10
+                result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
+                
+                if result.returncode != 0:
+                    print(f"Warning: Failed to set authenticated remote URL: {result.stderr}")
+                
+                # Attempt to push logging branch
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 30
+                result = subprocess.run(['git', 'push', 'origin', 'logging'], **kwargs)
+                
+                if result.returncode == 0:
+                    print(f"Successfully pushed logs to remote for participant {participant_id}")
+                    return True
+                else:
+                    error_msg = result.stderr.lower()
+                    if 'rejected' in error_msg or 'non-fast-forward' in error_msg:
+                        print(f"Log push rejected (attempt {attempt + 1}/{max_retries}). Trying to sync with remote...")
+                        
+                        # Try to sync with remote logging branch
+                        if self._sync_logging_with_remote():
+                            print("Successfully synced logging with remote. Retrying push...")
+                            continue
+                        else:
+                            print("Failed to sync logging with remote branch")
+                            if attempt == max_retries - 1:
+                                return False
+                    else:
+                        print(f"Log push failed with error: {result.stderr}")
+                        if attempt == max_retries - 1:
+                            return False
+                        
+            except subprocess.TimeoutExpired:
+                print(f"Log push operation timed out (attempt {attempt + 1}/{max_retries})")
+                if attempt == max_retries - 1:
+                    return False
+            except Exception as e:
+                print(f"Error during log push attempt {attempt + 1}: {str(e)}")
+                if attempt == max_retries - 1:
+                    return False
+        
+        return False
+    
+    def _sync_logging_with_remote(self) -> bool:
+        """
+        Sync local logging branch with remote logging branch.
+        Uses append-only strategy for logs.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Fetch latest changes
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 15
+            result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
+            
+            if result.returncode != 0:
+                print(f"Failed to fetch from remote: {result.stderr}")
+                return False
+            
+            # Try to pull and merge with strategy favoring both sides (logs are append-only)
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 20
+            result = subprocess.run(['git', 'pull', 'origin', 'logging'], **kwargs)
+            
+            if result.returncode == 0:
+                print("Successfully merged remote logging changes")
+                return True
+            else:
+                # If automatic merge fails, try to resolve with merge strategy
+                print(f"Automatic logging merge failed, trying merge strategy: {result.stderr}")
+                
+                # Reset to try a different approach
+                result = subprocess.run(['git', 'merge', '--abort'], **kwargs)
+                
+                # For logs, we want to merge both sides since logs should be append-only
+                # Use recursive merge with patience strategy for better merging
+                result = subprocess.run([
+                    'git', 'pull', 'origin', 'logging', '--strategy=recursive', '--strategy-option=patience'
+                ], **kwargs)
+                
+                if result.returncode == 0:
+                    print("Successfully resolved logging merge conflicts")
+                    return True
+                else:
+                    print(f"Failed to resolve logging merge conflicts: {result.stderr}")
+                    # As a last resort, try to rebase our changes on top of remote
+                    result = subprocess.run(['git', 'pull', '--rebase', 'origin', 'logging'], **kwargs)
+                    
+                    if result.returncode == 0:
+                        print("Successfully rebased logging changes on remote")
+                        return True
+                    else:
+                        print(f"Failed to rebase logging changes: {result.stderr}")
+                        return False
+                    
+        except Exception as e:
+            print(f"Error syncing logging with remote: {str(e)}")
+            return False
     
     def mark_stage_transition(self, participant_id: str, from_stage: int, to_stage: int,
                             development_mode: bool, github_token: Optional[str] = None,
