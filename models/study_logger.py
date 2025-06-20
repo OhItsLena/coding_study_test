@@ -40,6 +40,7 @@ class ScreenRecorder:
         """Initialize the screen recorder."""
         self.recording_process = None
         self.recording_file_path = None
+        self.recording_start_time = None
     
     def _get_obs_executable_path(self) -> str:
         """
@@ -74,6 +75,100 @@ class ScreenRecorder:
         else:  # Linux
             # OBS executable on Linux
             return "obs"
+    
+    def _get_obs_default_recording_paths(self) -> List[str]:
+        """
+        Get the platform-specific default OBS recording directories.
+        
+        Returns:
+            List of possible default recording paths for OBS
+        """
+        system = platform.system()
+        home_dir = os.path.expanduser("~")
+        
+        if system == "Windows":
+            # Common default recording paths on Windows
+            return [
+                os.path.join(home_dir, "Videos"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Desktop")
+            ]
+        
+        elif system == "Darwin":  # macOS
+            # Default recording paths on macOS
+            return [
+                os.path.join(home_dir, "Movies"),
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents")
+            ]
+        
+        else:  # Linux
+            # Default recording paths on Linux
+            return [
+                os.path.join(home_dir, "Videos"),
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents")
+            ]
+    
+    def _find_latest_recording_file(self, participant_id: str, study_stage: int, recording_start_time: float) -> Optional[str]:
+        """
+        Find the latest recording file created by OBS in its default locations.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            study_stage: The current study stage
+            recording_start_time: Unix timestamp when recording started
+            
+        Returns:
+            Path to the latest recording file, or None if not found
+        """
+        try:
+            default_paths = self._get_obs_default_recording_paths()
+            latest_file = None
+            latest_time = recording_start_time  # Only consider files created after recording started
+            
+            # Common video file extensions used by OBS
+            video_extensions = ['.mp4', '.mkv', '.flv', '.mov', '.avi']
+            
+            for directory in default_paths:
+                if not os.path.exists(directory):
+                    continue
+                    
+                for filename in os.listdir(directory):
+                    file_path = os.path.join(directory, filename)
+                    
+                    # Skip directories and non-video files
+                    if not os.path.isfile(file_path):
+                        continue
+                    
+                    # Check if it's a video file
+                    if not any(filename.lower().endswith(ext) for ext in video_extensions):
+                        continue
+                    
+                    try:
+                        # Get file modification time
+                        file_mtime = os.path.getmtime(file_path)
+                        
+                        # Only consider files created/modified after recording started
+                        if file_mtime > latest_time:
+                            latest_file = file_path
+                            latest_time = file_mtime
+                            
+                    except (OSError, PermissionError):
+                        # Skip files we can't access
+                        continue
+            
+            if latest_file:
+                print(f"Found latest recording file: {latest_file}")
+            else:
+                print(f"No recording file found in default locations created after {datetime.fromtimestamp(recording_start_time)}")
+            
+            return latest_file
+            
+        except Exception as e:
+            print(f"Error finding latest recording file: {e}")
+            return None
+    
     def start_recording(self, participant_id: str, study_stage: int, logs_directory: str) -> bool:
         """
         Start screen recording using OBS Studio with default configuration.
@@ -142,6 +237,9 @@ class ScreenRecorder:
                     "--minimize-to-tray"
                 ]
             
+            # Record the start time for file tracking
+            self.recording_start_time = time.time()
+            
             # Start the recording process
             print(f"Starting OBS screen recording: {recording_filename}")
             print(f"Command: {' '.join(obs_cmd)}")
@@ -191,6 +289,7 @@ class ScreenRecorder:
                 
                 self.recording_process = None
                 self.recording_file_path = None
+                self.recording_start_time = None
                 return False
             else:
                 # OBS is running, but it may not be using our specified file path
@@ -205,11 +304,13 @@ class ScreenRecorder:
             print("❌ OBS Studio not found. Please install OBS Studio and make sure it's accessible.")
             self.recording_process = None
             self.recording_file_path = None
+            self.recording_start_time = None
             return False
         except Exception as e:
             print(f"❌ Failed to start OBS screen recording: {e}")
             self.recording_process = None
             self.recording_file_path = None
+            self.recording_start_time = None
             return False
     
     def stop_recording(self) -> bool:
@@ -276,15 +377,57 @@ class ScreenRecorder:
                 except Exception:
                     pass
             
-            # Wait a moment for OBS to fully stop
-            time.sleep(2)
+            # Wait a moment for OBS to fully stop and save the file
+            print("Waiting for OBS to finish saving the recording file...")
+            time.sleep(5)  # Give OBS more time to save the file
             
-            print(f"OBS screen recording stopped successfully. File saved: {self.recording_file_path}")
+            # Try to find and move the recording file from default location
+            moved_file_path = None
+            if self.recording_start_time:
+                # Extract participant_id and study_stage from the expected file path
+                if self.recording_file_path:
+                    expected_filename = os.path.basename(self.recording_file_path)
+                    # Parse participant_id and stage from filename like: screen_recording_PARTICIPANT_stageN_TIMESTAMP.mp4
+                    try:
+                        parts = expected_filename.replace('screen_recording_', '').replace('.mp4', '').split('_')
+                        if len(parts) >= 3:
+                            participant_id = parts[0]
+                            stage_part = [p for p in parts if p.startswith('stage')][0]
+                            study_stage = int(stage_part.replace('stage', ''))
+                            
+                            # Find the latest recording file in default locations
+                            source_file = self._find_latest_recording_file(participant_id, study_stage, self.recording_start_time)
+                            
+                            if source_file and os.path.exists(source_file):
+                                try:
+                                    # Ensure the destination directory exists
+                                    dest_dir = os.path.dirname(self.recording_file_path)
+                                    os.makedirs(dest_dir, exist_ok=True)
+                                    
+                                    # Move the file from default location to our recordings directory
+                                    print(f"Moving recording file from {source_file} to {self.recording_file_path}")
+                                    shutil.move(source_file, self.recording_file_path)
+                                    moved_file_path = self.recording_file_path
+                                    print(f"✅ Successfully moved recording file to: {self.recording_file_path}")
+                                    
+                                except (OSError, PermissionError, shutil.Error) as e:
+                                    print(f"⚠️  Failed to move recording file: {e}")
+                                    print(f"   Recording remains at: {source_file}")
+                                    moved_file_path = source_file
+                            else:
+                                print(f"⚠️  Could not find recording file in default OBS locations")
+                                print(f"   Expected to find file created after: {datetime.fromtimestamp(self.recording_start_time)}")
+                    except (ValueError, IndexError, AttributeError) as e:
+                        print(f"⚠️  Could not parse recording filename for file moving: {e}")
+            
+            final_file_location = moved_file_path or "default OBS location"
+            print(f"OBS screen recording stopped successfully. File location: {final_file_location}")
             
             # Reset the recording state
             self.recording_process = None
             recording_file = self.recording_file_path
             self.recording_file_path = None
+            self.recording_start_time = None
             
             return True
             
@@ -292,6 +435,7 @@ class ScreenRecorder:
             print(f"Failed to stop OBS screen recording: {e}")
             self.recording_process = None
             self.recording_file_path = None
+            self.recording_start_time = None
             return False
     
     def is_recording(self) -> bool:
