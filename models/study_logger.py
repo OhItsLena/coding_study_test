@@ -1364,6 +1364,41 @@ class StudyLogger:
             except Exception as e:
                 print(f"Error returning to original directory: {str(e)}")
 
+    def get_session_log_history(self, participant_id: str, development_mode: bool, study_stage: int) -> List[Dict]:
+        """
+        Get the session log history for a participant and stage.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            development_mode: Whether running in development mode
+            study_stage: The study stage to get logs for
+        
+        Returns:
+            List of route visit entries for the specified stage, sorted by timestamp
+        """
+        try:
+            logs_path = self.get_logs_directory_path(participant_id, development_mode)
+            log_file_path = os.path.join(logs_path, 'session_log.json')
+            
+            if not os.path.exists(log_file_path):
+                return []
+            
+            with open(log_file_path, 'r', encoding='utf-8') as f:
+                logs_data = json.load(f)
+            
+            # Filter visits for the specified stage and sort by timestamp
+            stage_visits = [visit for visit in logs_data.get('visits', []) 
+                          if visit.get('study_stage') == study_stage]
+            
+            # Sort by timestamp (using timestamp_unix for reliable sorting)
+            stage_visits.sort(key=lambda x: x.get('timestamp_unix', 0))
+            
+            return stage_visits
+            
+        except Exception as e:
+            print(f"Error reading session log history: {str(e)}")
+            return []
+
 
 class SessionTracker:
     """

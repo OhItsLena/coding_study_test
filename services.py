@@ -326,3 +326,91 @@ def test_github_connectivity_async(participant_id, github_token, github_org):
     """Test GitHub connectivity asynchronously."""
     _async_github_service.queue_test_connectivity(participant_id, github_token, github_org)
     return True  # Return immediately
+
+
+def get_session_log_history(participant_id, development_mode, study_stage):
+    """Get the session log history for a participant and stage."""
+    return _study_logger.get_session_log_history(participant_id, development_mode, study_stage)
+
+
+def determine_correct_route(participant_id, development_mode, study_stage, current_route=None):
+    """
+    Determine the correct route for a participant based on their session log history.
+    Enforces linear study flow without allowing backwards navigation.
+    
+    Stage 1 Flow: home -> background_questionnaire -> tutorial -> task -> ux_questionnaire -> goodbye
+    Stage 2 Flow: welcome_back -> task -> ux_questionnaire -> goodbye
+    
+    Args:
+        participant_id: The participant's unique identifier
+        development_mode: Whether running in development mode
+        study_stage: The current study stage (1 or 2)
+        current_route: The route being accessed (optional, for more specific rules)
+    
+    Returns:
+        The route name the user should be redirected to, or None if no redirect needed
+    """
+    try:
+        # Get session log history for the current stage
+        session_visits = get_session_log_history(participant_id, development_mode, study_stage)
+        
+        if not session_visits:
+            # No visits logged yet - allow normal flow
+            return None
+        
+        # Extract route names from visits in chronological order
+        visited_routes = [visit.get('route') for visit in session_visits if visit.get('route')]
+        
+        # Define the study flow for each stage
+        if study_stage == 1:
+            flow = ['home', 'background_questionnaire', 'tutorial', 'task', 'ux_questionnaire', 'goodbye']
+        else:  # stage 2
+            flow = ['welcome_back', 'task', 'ux_questionnaire', 'goodbye']
+        
+        # Find the furthest step completed in the flow
+        furthest_step_index = -1
+        for i, step in enumerate(flow):
+            if step in visited_routes:
+                furthest_step_index = i
+        
+        # If no steps completed yet, allow normal flow
+        if furthest_step_index == -1:
+            return None
+        
+        # Get the current route's position in the flow
+        try:
+            current_route_index = flow.index(current_route) if current_route in flow else -1
+        except ValueError:
+            current_route_index = -1
+        
+        # If trying to access a step before the furthest completed step, redirect to furthest step
+        if current_route_index != -1 and current_route_index <= furthest_step_index:
+            # Allow access to the current furthest step or the next step
+            if current_route_index == furthest_step_index:
+                # User is on their current step - allow
+                return None
+            elif current_route_index == furthest_step_index + 1:
+                # User is trying to go to the next step - allow
+                return None
+            else:
+                # User is trying to go backwards - redirect to furthest step
+                return flow[furthest_step_index]
+        
+        # If trying to access a step too far ahead, redirect to the next logical step
+        if current_route_index > furthest_step_index + 1:
+            if furthest_step_index + 1 < len(flow):
+                return flow[furthest_step_index + 1]
+            else:
+                # Already at the end of the flow
+                return flow[furthest_step_index]
+        
+        # For routes not in the flow, redirect to the furthest completed step
+        if current_route not in flow:
+            return flow[furthest_step_index]
+        
+        # No redirect needed
+        return None
+        
+    except Exception as e:
+        print(f"Error determining correct route: {str(e)}")
+        return None

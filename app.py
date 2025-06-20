@@ -1,5 +1,6 @@
 import os
 import time
+import json
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from dotenv import load_dotenv
 from services import (
@@ -12,7 +13,8 @@ from services import (
     test_github_connectivity_async, stop_async_github_service, wait_for_async_github_completion,
     save_vscode_workspace_storage, save_vscode_workspace_storage_async,
     start_session_recording, stop_session_recording, is_recording_active,
-    setup_tutorial_branch, open_vscode_with_tutorial, push_tutorial_code
+    setup_tutorial_branch, open_vscode_with_tutorial, push_tutorial_code,
+    get_session_log_history, determine_correct_route
 )
 
 # Load environment variables from .env file
@@ -40,10 +42,56 @@ TASK_REQUIREMENTS = load_task_requirements()
 # Load tutorials at startup
 TUTORIALS = load_tutorials()
 
+def check_automatic_rerouting(current_route, participant_id, study_stage, development_mode):
+    """
+    Check if user should be automatically rerouted based on session history.
+    
+    Args:
+        current_route: The route the user is trying to access
+        participant_id: The participant's ID
+        study_stage: Current study stage
+        development_mode: Whether in development mode
+    
+    Returns:
+        Flask redirect response if rerouting is needed, None otherwise
+    """
+    try:
+        # Determine what route the user should be on based on their history
+        correct_route = determine_correct_route(participant_id, development_mode, study_stage, current_route)
+        
+        if correct_route and correct_route != current_route:
+            print(f"Automatic rerouting: {current_route} -> {correct_route} for participant {participant_id}, stage {study_stage}")
+            
+            # Map route names to URL endpoints
+            route_mapping = {
+                'home': 'home',
+                'background_questionnaire': 'background_questionnaire', 
+                'tutorial': 'tutorial',
+                'task': 'task',
+                'ux_questionnaire': 'ux_questionnaire',
+                'goodbye': 'goodbye',
+                'welcome_back': 'welcome_back'
+            }
+            
+            if correct_route in route_mapping:
+                return redirect(url_for(route_mapping[correct_route]))
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error in automatic rerouting: {str(e)}")
+        return None
+
 @app.route('/')
 def home():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Check for automatic rerouting based on session history
+    reroute = check_automatic_rerouting('home', participant_id, study_stage, DEVELOPMENT_MODE)
+    if reroute:
+        return reroute
+    
     coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
     
     # Log route visit if this is the first time
@@ -141,6 +189,11 @@ def background_questionnaire():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     
+    # Check for automatic rerouting based on session history
+    reroute = check_automatic_rerouting('background_questionnaire', participant_id, study_stage, DEVELOPMENT_MODE)
+    if reroute:
+        return reroute
+    
     # Check and clone repository when user starts the session (first time accessing this route)
     if should_log_route(session, 'background_questionnaire', study_stage):
         print(f"\nUser started session - checking and cloning repository for participant: {participant_id}")
@@ -179,6 +232,11 @@ def background_questionnaire():
 def ux_questionnaire():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Check for automatic rerouting based on session history
+    reroute = check_automatic_rerouting('ux_questionnaire', participant_id, study_stage, DEVELOPMENT_MODE)
+    if reroute:
+        return reroute
     
     # Log route visit if this is the first time
     if should_log_route(session, 'ux_questionnaire', study_stage):
@@ -242,6 +300,12 @@ def ux_questionnaire():
 def goodbye():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Check for automatic rerouting based on session history
+    reroute = check_automatic_rerouting('goodbye', participant_id, study_stage, DEVELOPMENT_MODE)
+    if reroute:
+        return reroute
+    
     coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
     
     # Log route visit if this is the first time
@@ -283,6 +347,11 @@ def goodbye():
 def tutorial():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Check for automatic rerouting based on session history
+    reroute = check_automatic_rerouting('tutorial', participant_id, study_stage, DEVELOPMENT_MODE)
+    if reroute:
+        return reroute
     
     # Log route visit if this is the first time
     if should_log_route(session, 'tutorial', study_stage):
@@ -335,6 +404,12 @@ def tutorial():
 def welcome_back():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Check for automatic rerouting based on session history
+    reroute = check_automatic_rerouting('welcome_back', participant_id, study_stage, DEVELOPMENT_MODE)
+    if reroute:
+        return reroute
+    
     coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
     
     # Check and clone repository when stage 2 user starts (first time accessing this route)
@@ -384,6 +459,12 @@ def welcome_back():
 def task():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Check for automatic rerouting based on session history
+    reroute = check_automatic_rerouting('task', participant_id, study_stage, DEVELOPMENT_MODE)
+    if reroute:
+        return reroute
+    
     coding_condition = get_coding_condition(participant_id, DEVELOPMENT_MODE, DEV_CODING_CONDITION)
     
     # Set up repository for the current stage (ensure correct branch)
@@ -684,6 +765,85 @@ def debug_recording():
     <a href="/debug-recording?action=stop">Stop Recording</a> | 
     <a href="/debug-recording">Status Only</a>
     <br><br>
+    <a href="/debug-session">← Back to Debug Session</a>
+    """
+
+@app.route('/debug-routing')
+def debug_routing():
+    """Debug route to display routing logic and session history during development"""
+    if not DEVELOPMENT_MODE:
+        return "Only available in development mode", 403
+    
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Get session log history
+    session_visits = get_session_log_history(participant_id, DEVELOPMENT_MODE, study_stage)
+    visited_routes = [visit.get('route') for visit in session_visits if visit.get('route')]
+    
+    # Define the study flow for current stage
+    if study_stage == 1:
+        flow = ['home', 'background_questionnaire', 'tutorial', 'task', 'ux_questionnaire', 'goodbye']
+        flow_name = "Stage 1 Flow"
+    else:
+        flow = ['welcome_back', 'task', 'ux_questionnaire', 'goodbye']
+        flow_name = "Stage 2 Flow"
+    
+    # Find the furthest step completed
+    furthest_step_index = -1
+    for i, step in enumerate(flow):
+        if step in visited_routes:
+            furthest_step_index = i
+    
+    current_step = flow[furthest_step_index] if furthest_step_index >= 0 else "None"
+    next_step = flow[furthest_step_index + 1] if furthest_step_index >= 0 and furthest_step_index + 1 < len(flow) else "None"
+    
+    # Test routing for each possible current route
+    routing_tests = {}
+    test_routes = ['home', 'background_questionnaire', 'tutorial', 'task', 'ux_questionnaire', 'goodbye', 'welcome_back']
+    
+    for route in test_routes:
+        suggested_route = determine_correct_route(participant_id, DEVELOPMENT_MODE, study_stage, route)
+        routing_tests[route] = suggested_route
+    
+    # Create flow visualization
+    flow_html = []
+    for i, step in enumerate(flow):
+        if i <= furthest_step_index:
+            # Completed step
+            flow_html.append(f'<span style="color: green; font-weight: bold;">{step}</span>')
+        elif i == furthest_step_index + 1:
+            # Next step
+            flow_html.append(f'<span style="color: blue; font-weight: bold;">{step}</span>')
+        else:
+            # Future step
+            flow_html.append(f'<span style="color: gray;">{step}</span>')
+    
+    flow_display = ' → '.join(flow_html)
+    
+    return f"""
+    <h2>🔄 Simplified Routing Debug</h2>
+    <p><strong>Participant:</strong> {participant_id}</p>
+    <p><strong>Stage:</strong> {study_stage}</p>
+    
+    <h3>{flow_name}</h3>
+    <p>{flow_display}</p>
+    <p><strong>Legend:</strong> <span style="color: green;">Completed</span> | <span style="color: blue;">Next Available</span> | <span style="color: gray;">Future</span></p>
+    
+    <p><strong>Current Step:</strong> {current_step}</p>
+    <p><strong>Next Step:</strong> {next_step}</p>
+    <p><strong>Visited Routes:</strong> {' → '.join(visited_routes) if visited_routes else 'None'}</p>
+    
+    <h3>Route Testing</h3>
+    <p>Shows where each route would redirect to:</p>
+    <ul>
+    {''.join([f'<li><strong>{route}</strong> → {suggested if suggested else "no redirect"}</li>' for route, suggested in routing_tests.items()])}
+    </ul>
+    
+    <h3>Session History</h3>
+    <pre>{json.dumps(session_visits, indent=2, ensure_ascii=False)}</pre>
+    
+    <hr>
     <a href="/debug-session">← Back to Debug Session</a>
     """
 
