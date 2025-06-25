@@ -387,6 +387,11 @@ class RepositoryManager:
                     print(f"Failed to checkout local branch {branch_name}. Error: {result.stderr}")
                     return False
                 
+                # For stage-1, ensure it's properly based on main/master before pulling
+                if study_stage == 1:
+                    if not self._ensure_stage1_based_on_main(branch_name):
+                        print(f"Warning: Failed to ensure {branch_name} is based on main/master")
+                
                 # Pull updates from remote with merge strategy
                 kwargs = self._get_subprocess_kwargs()
                 kwargs['timeout'] = 20
@@ -408,6 +413,11 @@ class RepositoryManager:
                 if result.returncode != 0:
                     print(f"Failed to checkout local branch {branch_name}. Error: {result.stderr}")
                     return False
+                
+                # For stage-1, ensure it's properly based on main/master
+                if study_stage == 1:
+                    if not self._ensure_stage1_based_on_main(branch_name):
+                        print(f"Warning: Failed to ensure {branch_name} is based on main/master")
                     
             elif branch_exists_remotely:
                 # Only remote branch exists - create local tracking branch
@@ -421,6 +431,11 @@ class RepositoryManager:
                 if result.returncode != 0:
                     print(f"Failed to create tracking branch {branch_name}. Error: {result.stderr}")
                     return False
+                
+                # For stage-1, ensure it's properly based on main/master after checkout
+                if study_stage == 1:
+                    if not self._ensure_stage1_based_on_main(branch_name):
+                        print(f"Warning: Failed to ensure {branch_name} is based on main/master")
                     
             else:
                 # Neither local nor remote exist - create new branch from appropriate base
@@ -431,17 +446,40 @@ class RepositoryManager:
                 
                 if study_stage == 1:
                     # Stage-1 should be created from main/master
-                    # Check if main branch exists (newer repos use 'main')
-                    result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/main'], **kwargs)
-                    base_branch = 'main' if 'origin/main' in result.stdout else 'master'
-                    base_ref = f'origin/{base_branch}'
+                    # First check if we have a remote
+                    result = subprocess.run(['git', 'remote'], **kwargs)
+                    has_remote = bool(result.stdout.strip())
                     
-                    # Fetch the latest main/master branch
-                    result = subprocess.run(['git', 'fetch', 'origin', base_branch], **kwargs)
-                    if result.returncode != 0:
-                        print(f"Warning: Failed to fetch {base_branch} branch. Error: {result.stderr}")
-                    
-                    print(f"Creating {branch_name} from {base_branch} branch")
+                    if has_remote:
+                        # Check if main branch exists (newer repos use 'main')
+                        result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/main'], **kwargs)
+                        base_branch = 'main' if 'origin/main' in result.stdout else 'master'
+                        base_ref = f'origin/{base_branch}'
+                        
+                        # Fetch the latest main/master branch
+                        result = subprocess.run(['git', 'fetch', 'origin', base_branch], **kwargs)
+                        if result.returncode != 0:
+                            print(f"Warning: Failed to fetch {base_branch} branch. Error: {result.stderr}")
+                        
+                        print(f"Creating {branch_name} from remote {base_branch} branch")
+                    else:
+                        # No remote, use local main/master branch
+                        # Check if main branch exists locally
+                        result = subprocess.run(['git', 'branch', '--list', 'main'], **kwargs)
+                        if 'main' in result.stdout:
+                            base_ref = 'main'
+                            base_branch = 'main'
+                        else:
+                            # Check for master branch
+                            result = subprocess.run(['git', 'branch', '--list', 'master'], **kwargs)
+                            if 'master' in result.stdout:
+                                base_ref = 'master'
+                                base_branch = 'master'
+                            else:
+                                print("Error: Neither main nor master branch exists locally")
+                                return False
+                        
+                        print(f"Creating {branch_name} from local {base_branch} branch")
                     
                 elif study_stage == 2:
                     # Stage-2 should be created from stage-1
@@ -494,6 +532,128 @@ class RepositoryManager:
                 os.chdir(original_cwd)
             except Exception as e:
                 print(f"Warning: Failed to restore working directory: {str(e)}")
+    
+    def _ensure_stage1_based_on_main(self, branch_name: str) -> bool:
+        """
+        Ensure that a stage-1 branch is properly based on main/master branch.
+        This method checks if the stage-1 branch has the latest main/master changes
+        and resets it if necessary to ensure it starts from the correct base.
+        
+        Args:
+            branch_name: Name of the stage-1 branch
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 10
+            
+            # Check if we have a remote
+            result = subprocess.run(['git', 'remote'], **kwargs)
+            has_remote = bool(result.stdout.strip())
+            
+            if has_remote:
+                # Determine which base branch to use (main or master) from remote
+                result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/main'], **kwargs)
+                base_branch = 'main' if 'origin/main' in result.stdout else 'master'
+                base_ref = f'origin/{base_branch}'
+                
+                # Fetch the latest base branch
+                result = subprocess.run(['git', 'fetch', 'origin', base_branch], **kwargs)
+                if result.returncode != 0:
+                    print(f"Warning: Failed to fetch {base_branch} branch. Error: {result.stderr}")
+                    return False
+            else:
+                # No remote, use local main/master branch
+                result = subprocess.run(['git', 'branch', '--list', 'main'], **kwargs)
+                if 'main' in result.stdout:
+                    base_branch = 'main'
+                    base_ref = 'main'
+                else:
+                    result = subprocess.run(['git', 'branch', '--list', 'master'], **kwargs)
+                    if 'master' in result.stdout:
+                        base_branch = 'master'
+                        base_ref = 'master'
+                    else:
+                        print("Error: Neither main nor master branch exists locally")
+                        return False
+            
+            # Check if stage-1 branch has commits that main/master doesn't have
+            # This helps us determine if stage-1 was created from a different branch (like tutorial)
+            result = subprocess.run([
+                'git', 'rev-list', '--count', f'{base_ref}..{branch_name}'
+            ], **kwargs)
+            
+            if result.returncode != 0:
+                print(f"Warning: Failed to check branch divergence. Error: {result.stderr}")
+                return False
+            
+            commits_ahead = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
+            
+            # Check if main/master has commits that stage-1 doesn't have
+            result = subprocess.run([
+                'git', 'rev-list', '--count', f'{branch_name}..{base_ref}'
+            ], **kwargs)
+            
+            if result.returncode != 0:
+                print(f"Warning: Failed to check branch behind count. Error: {result.stderr}")
+                return False
+            
+            commits_behind = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
+            
+            # If stage-1 is behind main/master, we should update it
+            if commits_behind > 0:
+                print(f"Stage-1 branch is {commits_behind} commits behind {base_branch}. Updating...")
+                
+                # If stage-1 has its own commits, we need to be careful about preserving work
+                if commits_ahead > 0:
+                    print(f"Stage-1 branch has {commits_ahead} commits ahead of {base_branch}. Attempting to rebase...")
+                    
+                    # Try to rebase stage-1 onto main/master
+                    result = subprocess.run([
+                        'git', 'rebase', base_ref
+                    ], **kwargs)
+                    
+                    if result.returncode == 0:
+                        print(f"Successfully rebased {branch_name} onto {base_branch}")
+                        return True
+                    else:
+                        print(f"Rebase failed: {result.stderr}")
+                        # Abort the rebase and try merge instead
+                        subprocess.run(['git', 'rebase', '--abort'], **kwargs)
+                        
+                        print(f"Attempting to merge {base_branch} into {branch_name}...")
+                        result = subprocess.run([
+                            'git', 'merge', base_ref
+                        ], **kwargs)
+                        
+                        if result.returncode == 0:
+                            print(f"Successfully merged {base_branch} into {branch_name}")
+                            return True
+                        else:
+                            print(f"Merge also failed: {result.stderr}")
+                            return False
+                else:
+                    # No commits ahead, safe to reset to main/master
+                    print(f"Resetting {branch_name} to match {base_branch}")
+                    result = subprocess.run([
+                        'git', 'reset', '--hard', base_ref
+                    ], **kwargs)
+                    
+                    if result.returncode == 0:
+                        print(f"Successfully reset {branch_name} to {base_branch}")
+                        return True
+                    else:
+                        print(f"Failed to reset branch: {result.stderr}")
+                        return False
+            else:
+                print(f"Stage-1 branch is up to date with {base_branch}")
+                return True
+                
+        except Exception as e:
+            print(f"Error ensuring stage-1 is based on main: {str(e)}")
+            return False
     
     def setup_repository_for_stage(self, participant_id: str, study_stage: int, 
                                  development_mode: bool, github_token: Optional[str], 
