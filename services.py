@@ -338,7 +338,7 @@ def determine_correct_route(participant_id, development_mode, study_stage, curre
     Determine the correct route for a participant based on their session log history.
     Enforces linear study flow without allowing backwards navigation.
     
-    Stage 1 Flow: home -> background_questionnaire -> tutorial -> task -> ux_questionnaire -> goodbye
+    Stage 1 Flow: home -> consent -> background_questionnaire -> tutorial -> task -> ux_questionnaire -> goodbye
     Stage 2 Flow: welcome_back -> task -> ux_questionnaire -> goodbye
     
     Args:
@@ -363,7 +363,7 @@ def determine_correct_route(participant_id, development_mode, study_stage, curre
         
         # Define the study flow for each stage
         if study_stage == 1:
-            flow = ['home', 'background_questionnaire', 'tutorial', 'task', 'ux_questionnaire', 'goodbye']
+            flow = ['home', 'consent', 'background_questionnaire', 'tutorial', 'task', 'ux_questionnaire', 'goodbye']
         else:  # stage 2
             flow = ['welcome_back', 'task', 'ux_questionnaire', 'goodbye']
         

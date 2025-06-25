@@ -65,6 +65,7 @@ def check_automatic_rerouting(current_route, participant_id, study_stage, develo
             # Map route names to URL endpoints
             route_mapping = {
                 'home': 'home',
+                'consent': 'consent_form',
                 'background_questionnaire': 'background_questionnaire', 
                 'tutorial': 'tutorial',
                 'task': 'task',
@@ -107,11 +108,10 @@ def home():
             async_mode=ASYNC_GITHUB_MODE
         )
         mark_route_as_logged(session, 'home', study_stage)
-    
-    # Stage 2 participants should go directly to welcome back screen
+     # Stage 2 participants should go directly to welcome back screen
     if study_stage == 2:
         return redirect(url_for('welcome_back'))
-    
+
     return render_template('home.jinja', 
                          participant_id=participant_id,
                          study_stage=study_stage,
@@ -184,6 +184,106 @@ def debug_session():
                          session_items=session_items,
                          recording_active=recording_active)
 
+@app.route('/consent', methods=['GET', 'POST'])
+def consent_form():
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    
+    # Check for automatic rerouting based on session history
+    reroute = check_automatic_rerouting('consent', participant_id, study_stage, DEVELOPMENT_MODE)
+    if reroute:
+        return reroute
+    
+    # Stage 2 participants should skip consent and go directly to welcome back screen
+    if study_stage == 2:
+        return redirect(url_for('welcome_back'))
+    
+    if request.method == 'POST':
+        # Check if consent was given
+        if request.form.get('consent'):
+            # Mark consent as given in session
+            session['consent_given'] = True
+            
+            # Log route visit
+            log_route_visit(
+                participant_id=participant_id,
+                route_name='consent_completed',
+                development_mode=DEVELOPMENT_MODE,
+                study_stage=study_stage,
+                session_data={'consent_given': True},
+                github_token=GITHUB_TOKEN,
+                github_org=GITHUB_ORG,
+                async_mode=ASYNC_GITHUB_MODE
+            )
+            
+            return redirect(url_for('background_questionnaire'))
+        else:
+            # If consent not given, redirect back to consent form
+            return redirect(url_for('consent_form'))
+    
+    # Load consent data from JSON
+    consent_data = {}
+    try:
+        with open(os.path.join(os.path.dirname(__file__), 'exportInformedConsent.json'), 'r') as f:
+            consent_data = json.load(f)
+    except FileNotFoundError:
+        print("Warning: exportInformedConsent.json not found")
+        consent_data = {}
+    
+    # Log route visit if this is the first time
+    if should_log_route(session, 'consent', study_stage):
+        log_route_visit(
+            participant_id=participant_id,
+            route_name='consent',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data={'first_consent_visit': True},
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG,
+            async_mode=ASYNC_GITHUB_MODE
+        )
+        mark_route_as_logged(session, 'consent', study_stage)
+    
+    # Parse procedure steps
+    procedure_steps = []
+    if consent_data.get('procedure'):
+        # Split by numbered points and clean up
+        lines = consent_data['procedure'].split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and (line[0].isdigit() or line.startswith('1.') or line.startswith('2.') or line.startswith('3.') or line.startswith('4.')):
+                # Remove the number and period, keep the text
+                step_text = line.split('.', 1)[1].strip() if '.' in line else line
+                procedure_steps.append(step_text)
+    
+    # Prepare researcher names for display
+    researchers_names = ""
+    if consent_data.get('researchers'):
+        names = [r.get('name', '') for r in consent_data['researchers']]
+        if len(names) > 1:
+            researchers_names = ', '.join(names[:-1]) + ', and ' + names[-1]
+        elif names:
+            researchers_names = names[0]
+    
+    return render_template('consent.jinja',
+                         participant_id=participant_id,
+                         study_stage=study_stage,
+                         consent_data=consent_data,
+                         study_title=consent_data.get('title', 'Research Study'),
+                         researchers_names=researchers_names,
+                         pi_name=consent_data.get('thePIname', 'Principal Investigator'),
+                         pi_email=consent_data.get('thePIemail', ''),
+                         institution=consent_data.get('institution', 'Research Institution'),
+                         duration=consent_data.get('duration', '120 minutes'),
+                         personal_data=consent_data.get('personalData', 'age and gender'),
+                         compensation=consent_data.get('monetaryCompensation', '15 EUR/hour'),
+                         participants=consent_data.get('participants', '30'),
+                         purpose=consent_data.get('purpose', ''),
+                         goal=consent_data.get('goal', ''),
+                         storage_time=consent_data.get('storageTime', '5 years'),
+                         procedure_steps=procedure_steps,
+                         researchers=consent_data.get('researchers', []))
+
 @app.route('/background-questionnaire')
 def background_questionnaire():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
@@ -215,6 +315,10 @@ def background_questionnaire():
     # Stage 2 participants should skip the background questionnaire
     if study_stage == 2:
         return redirect(url_for('welcome_back'))
+    
+    # Check if consent has been given for stage 1 participants
+    if study_stage == 1 and not session.get('consent_given'):
+        return redirect(url_for('consent_form'))
     
     survey_url = os.getenv('SURVEY_URL', '#')
     
@@ -783,7 +887,7 @@ def debug_routing():
     
     # Define the study flow for current stage
     if study_stage == 1:
-        flow = ['home', 'background_questionnaire', 'tutorial', 'task', 'ux_questionnaire', 'goodbye']
+        flow = ['home', 'consent', 'background_questionnaire', 'tutorial', 'task', 'ux_questionnaire', 'goodbye']
         flow_name = "Stage 1 Flow"
     else:
         flow = ['welcome_back', 'task', 'ux_questionnaire', 'goodbye']
@@ -800,7 +904,7 @@ def debug_routing():
     
     # Test routing for each possible current route
     routing_tests = {}
-    test_routes = ['home', 'background_questionnaire', 'tutorial', 'task', 'ux_questionnaire', 'goodbye', 'welcome_back']
+    test_routes = ['home', 'consent', 'background_questionnaire', 'tutorial', 'task', 'ux_questionnaire', 'goodbye', 'welcome_back']
     
     for route in test_routes:
         suggested_route = determine_correct_route(participant_id, DEVELOPMENT_MODE, study_stage, route)

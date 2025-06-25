@@ -76,14 +76,17 @@ class TestFlaskRoutes:
         """Test background questionnaire route."""
         with patch('app.get_participant_id', return_value='test-participant'):
             with patch('app.get_study_stage', return_value=1):
-                with patch('app.should_log_route', return_value=True):
-                    with patch('app.log_route_visit', return_value=True):
-                        with patch('app.mark_route_as_logged'):
-                            with patch.dict('os.environ', {'SURVEY_URL': 'https://example.com/survey'}):
-                                response = client.get('/background-questionnaire')
-                                
-                                assert response.status_code == 200
-                                assert b'https://example.com/survey' in response.data
+                with patch('app.check_automatic_rerouting', return_value=None):
+                    with patch('app.should_log_route', return_value=True):
+                        with patch('app.log_route_visit', return_value=True):
+                            with patch('app.mark_route_as_logged'):
+                                with patch.dict('os.environ', {'SURVEY_URL': 'https://example.com/survey'}):
+                                    with client.session_transaction() as sess:
+                                        sess['consent_given'] = True
+                                    response = client.get('/background-questionnaire')
+                                    
+                                    assert response.status_code == 200
+                                    assert b'https://example.com/survey' in response.data
     
     def test_tutorial_route_stage_1(self, client):
         """Test tutorial route for stage 1."""
