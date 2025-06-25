@@ -42,138 +42,10 @@ class RepositoryManager:
         
         # On Windows, prevent terminal window from showing
         if platform.system() == "Windows":
-            try:
-                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-            except AttributeError:
-                # CREATE_NO_WINDOW not available on this platform
-                pass
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
         
         return kwargs
     
-    def save_all_files_in_vscode(self, repo_path: str) -> bool:
-        """
-        Save all open files in VS Code for the given repository workspace.
-        This ensures that any unsaved changes are not lost when committing.
-        Uses multiple approaches to maximize compatibility.
-        
-        Args:
-            repo_path: Path to the repository workspace
-        
-        Returns:
-            True if successful or if VS Code is not available, False if there was an error
-        """
-        try:
-            print(f"Saving all open files in VS Code for workspace: {repo_path}")
-            
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 15
-            
-            # Method 1: Use VS Code CLI with command flag (most reliable)
-            try:
-                result = subprocess.run([
-                    'code', '--command', 'workbench.action.files.saveAll'
-                ], **kwargs)
-                
-                if result.returncode == 0:
-                    print(f"Successfully saved all files using VS Code command")
-                    return True
-                else:
-                    print(f"VS Code command method failed: {result.stderr}")
-            except Exception as e:
-                print(f"VS Code command method error: {str(e)}")
-            
-            # Method 2: Try using AppleScript on macOS to send save command
-            if platform.system() == "Darwin":  # macOS
-                try:
-                    applescript = '''
-                    tell application "Visual Studio Code"
-                        if it is running then
-                            tell application "System Events"
-                                keystroke "s" using {command down, option down}
-                            end tell
-                        end if
-                    end tell
-                    '''
-                    result = subprocess.run([
-                        'osascript', '-e', applescript
-                    ], **kwargs)
-                    
-                    if result.returncode == 0:
-                        print(f"Successfully saved files using AppleScript")
-                        return True
-                    else:
-                        print(f"AppleScript method failed: {result.stderr}")
-                except Exception as e:
-                    print(f"AppleScript method error: {str(e)}")
-            
-            # Method 3: Use xdotool on Linux to send keyboard shortcut
-            elif platform.system() == "Linux":
-                try:
-                    # First check if VS Code window exists
-                    result = subprocess.run([
-                        'xdotool', 'search', '--name', 'Visual Studio Code'
-                    ], **kwargs)
-                    
-                    if result.returncode == 0 and result.stdout.strip():
-                        # Send Ctrl+Alt+S (save all) to VS Code
-                        result = subprocess.run([
-                            'xdotool', 'search', '--name', 'Visual Studio Code', 
-                            'key', 'ctrl+alt+s'
-                        ], **kwargs)
-                        
-                        if result.returncode == 0:
-                            print(f"Successfully saved files using xdotool")
-                            return True
-                        else:
-                            print(f"xdotool method failed: {result.stderr}")
-                    else:
-                        print("VS Code window not found for xdotool")
-                except Exception as e:
-                    print(f"xdotool method error: {str(e)}")
-            
-            # Method 4: Windows - use PowerShell to send keys
-            elif platform.system() == "Windows":
-                try:
-                    powershell_script = '''
-                    Add-Type -AssemblyName System.Windows.Forms
-                    $processes = Get-Process -Name "Code" -ErrorAction SilentlyContinue
-                    if ($processes) {
-                        Add-Type -AssemblyName Microsoft.VisualBasic
-                        [Microsoft.VisualBasic.Interaction]::AppActivate("Visual Studio Code")
-                        Start-Sleep -Milliseconds 500
-                        [System.Windows.Forms.SendKeys]::SendWait("^+{F12}")
-                    }
-                    '''
-                    result = subprocess.run([
-                        'powershell', '-Command', powershell_script
-                    ], **kwargs)
-                    
-                    if result.returncode == 0:
-                        print(f"Successfully saved files using PowerShell")
-                        return True
-                    else:
-                        print(f"PowerShell method failed: {result.stderr}")
-                except Exception as e:
-                    print(f"PowerShell method error: {str(e)}")
-            
-            # If all methods fail, provide helpful message but don't fail the commit
-            print("All automatic save methods failed - VS Code may not be running")
-            print("Files may already be saved, or please save manually before committing")
-            print("Continuing with commit...")
-            return True
-                    
-        except subprocess.TimeoutExpired:
-            print("VS Code save operation timed out - continuing with commit")
-            return True  # Don't fail the commit due to save timeout
-        except FileNotFoundError:
-            print("VS Code CLI not available - unable to save files automatically")
-            print("Please save your files manually before committing")
-            return True  # Don't fail the commit if VS Code CLI is not available
-        except Exception as e:
-            print(f"Error saving files in VS Code: {str(e)}")
-            print("Continuing with commit - please ensure files are saved manually")
-            return True  # Don't fail the commit due to save errors
-
     def get_repository_path(self, participant_id: str, development_mode: bool) -> str:
         """
         Get the path to the participant's repository.
@@ -749,9 +621,6 @@ class RepositoryManager:
                 print("No changes to commit")
                 return True
             
-            # Save all open files in VS Code before committing
-            self.save_all_files_in_vscode(repo_path)
-            
             # Add all changes
             kwargs = self._get_subprocess_kwargs()
             kwargs['timeout'] = 10
@@ -1134,9 +1003,6 @@ class RepositoryManager:
                 has_changes = bool(result.stdout.strip())
                 
                 if has_changes:
-                    # Save all open files in VS Code before committing tutorial changes
-                    self.save_all_files_in_vscode(repo_path)
-                    
                     # Add all changes
                     result = subprocess.run(['git', 'add', '.'], **kwargs)
                     if result.returncode != 0:
@@ -1259,12 +1125,8 @@ class VSCodeManager:
         
         # On Windows, prevent terminal window from showing
         if platform.system() == "Windows":
-            try:
-                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-                kwargs['shell'] = True  # Use shell=True for Windows compatibility
-            except AttributeError:
-                # CREATE_NO_WINDOW not available on this platform
-                kwargs['shell'] = True
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            kwargs['shell'] = True  # Use shell=True for Windows compatibility
         
         return kwargs
     
