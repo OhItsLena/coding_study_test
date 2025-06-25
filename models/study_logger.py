@@ -540,6 +540,11 @@ class StudyLogger:
         Returns:
             True if recording started successfully, False otherwise
         """
+        # Skip screen recording in development mode
+        if development_mode:
+            print("Screen recording disabled in development mode")
+            return True
+            
         logs_directory = self.get_logs_directory_path(participant_id, development_mode)
         return self.screen_recorder.start_recording(participant_id, study_stage, logs_directory)
     
