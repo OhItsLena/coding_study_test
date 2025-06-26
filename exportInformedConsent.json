@@ -1,0 +1,46 @@
+{
+    "version": "0.2.2",
+    "versionData": "0.3",
+    "title": "Coding with AI: Exploring New Paradigms",
+    "duration": "120 minutes",
+    "personalData": "age and gender",
+    "storageTime": "5 years",
+    "purpose": "The purpose is to sample results and feedback from coding with different levels of AI support.",
+    "goal": "We aim to compare an emerging AI coding paradigm with the current method of writing code to evaluate its benefits and drawbacks.",
+    "departmentHead": "",
+    "thePIname": "Prof. Dr. Sven Mayer",
+    "thePIemail": "sven.mayer@ifi.lmu.de",
+    "participants": "30",
+    "monetaryCompensation": "15 EUR/hour",
+    "ethicalComittee": "",
+    "funding": "",
+    "record": {
+        "demographics": true,
+        "contact": true,
+        "audio": false,
+        "photos": false,
+        "videos": false,
+        "motion": false,
+        "physiological": false,
+        "eyetracking": false,
+        "screenrecoding": true,
+        "notes": false,
+        "interaction": true
+    },
+    "procedure": "1. Establishing a connection to a development environment within a virtual machine via a RDP connection.\n2. Answering a background questionnaire\n3. Working on a coding task using the provided level of AI support\n4. Proving insights about the development experience during the task",
+    "institution": "LMU Munich",
+    "type": "online study",
+    "share": "no",
+    "encryption": "no",
+    "compensation": "money",
+    "researchers": [
+        {
+            "name": "Thomas Weber",
+            "email": "thomas.weber@lmu.ifi.de"
+        },
+        {
+            "name": "Lena Hammerer",
+            "email": "lena.hammerer@campus.lmu.de"
+        }
+    ]
+}
