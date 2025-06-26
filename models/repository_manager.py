@@ -551,6 +551,7 @@ class RepositoryManager:
     def _push_all_branches_backup(self, participant_id: str, github_token: str, github_org: str) -> bool:
         """
         Push all local branches to remote as backup.
+        Preserves the current active branch throughout the operation.
         
         Args:
             participant_id: The participant's unique identifier
@@ -561,11 +562,21 @@ class RepositoryManager:
             True if successful, False otherwise
         """
         try:
+            # Store the current branch to ensure we stay on it
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 5
+            result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
+            if result.returncode != 0:
+                print(f"Warning: Could not determine current branch: {result.stderr}")
+                original_branch = None
+            else:
+                original_branch = result.stdout.strip()
+                print(f"Backing up branches while preserving current branch: {original_branch}")
+            
             # Set up authenticated remote URL
             repo_name = f"study-{participant_id}"
             authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
             
-            kwargs = self._get_subprocess_kwargs()
             kwargs['timeout'] = 10
             result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
             if result.returncode != 0:
@@ -593,6 +604,19 @@ class RepositoryManager:
                     print(f"Successfully backed up branch: {branch}")
                 else:
                     print(f"Warning: Failed to backup branch: {branch}")
+            
+            # Verify we're still on the original branch after backup
+            if original_branch:
+                result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
+                if result.returncode == 0:
+                    current_branch = result.stdout.strip()
+                    if current_branch != original_branch:
+                        print(f"Warning: Branch changed during backup from '{original_branch}' to '{current_branch}'. Switching back...")
+                        checkout_result = subprocess.run(['git', 'checkout', original_branch], **kwargs)
+                        if checkout_result.returncode != 0:
+                            print(f"Error: Failed to switch back to original branch '{original_branch}': {checkout_result.stderr}")
+                        else:
+                            print(f"Successfully switched back to original branch: {original_branch}")
             
             print(f"Backup completed: {success_count}/{len(local_branches)} branches backed up successfully")
             return success_count > 0  # Success if at least one branch was backed up
