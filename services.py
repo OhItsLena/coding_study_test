@@ -135,7 +135,7 @@ def commit_code_changes(participant_id, study_stage, commit_message, development
         return True  # Return immediately
     else:
         # Synchronous processing
-        return _repository_manager.commit_code_changes(
+        return _repository_manager.commit_and_backup_all(
             participant_id, study_stage, commit_message, development_mode, github_token, github_org
         )
 
