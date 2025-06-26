@@ -204,15 +204,22 @@ class RepositoryManager:
             except Exception as e:
                 print(f"Warning: Failed to restore working directory: {str(e)}")
     
-    def ensure_stage_branch(self, repo_path: str, study_stage: int) -> bool:
+    def ensure_branch(self, repo_path: str, branch_name: str, source_branch: str = None, 
+                     participant_id: str = None, github_token: Optional[str] = None, 
+                     github_org: str = None, skip_backup: bool = False) -> bool:
         """
-        Ensure the correct branch exists and is checked out for the given study stage.
-        Creates stage-1 or stage-2 branch and switches to it.
-        Handles remote synchronization to avoid conflicts.
+        Ensure a specific branch exists and is checked out.
+        Uses simplified, deterministic approach for creating branches from specified sources.
         
         Args:
             repo_path: Path to the repository
-            study_stage: The study stage (1 or 2)
+            branch_name: Name of the branch to ensure (e.g., 'stage-1', 'tutorial')
+            source_branch: Source branch to create from if branch doesn't exist (optional)
+                          If None, will try to create from remote branch with same name
+            participant_id: Participant ID for backup operations (optional)
+            github_token: GitHub token for backup operations (optional)
+            github_org: GitHub organization for backup operations (optional)
+            skip_backup: Skip backup operations (used when already on correct branch)
         
         Returns:
             True if successful, False otherwise
@@ -221,318 +228,142 @@ class RepositoryManager:
             original_cwd = os.getcwd()
             os.chdir(repo_path)
             
-            branch_name = f"stage-{study_stage}"
+            print(f"Setting up branch: {branch_name}")
             
-            # First, fetch latest remote refs to ensure we have up-to-date information
-            print(f"Fetching latest remote refs for {branch_name}")
+            # Step 1: Check current branch to see if backup is needed
             kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 5
+            result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
+            current_branch = result.stdout.strip() if result.returncode == 0 else None
+            
+            # Step 2: Fetch latest remote refs
             kwargs['timeout'] = 15
             result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
             if result.returncode != 0:
-                print(f"Warning: Failed to fetch from remote. Error: {result.stderr}")
-                # Continue anyway - might be first time or network issue
+                print(f"Warning: Failed to fetch from remote: {result.stderr}")
             
-            # Check if the branch already exists locally
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 10
-            result = subprocess.run([
-                'git', 'branch', '--list', branch_name
-            ], **kwargs)
-            branch_exists_locally = branch_name in result.stdout
+            # Step 3: Check if the branch already exists locally
+            result = subprocess.run(['git', 'branch', '--list', branch_name], **kwargs)
+            branch_exists = branch_name in result.stdout
             
-            # Check if the branch exists on remote
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 10
-            result = subprocess.run([
-                'git', 'branch', '-r', '--list', f'origin/{branch_name}'
-            ], **kwargs)
-            branch_exists_remotely = f'origin/{branch_name}' in result.stdout
+            if branch_exists and current_branch == branch_name:
+                # Already on the correct branch, no backup needed
+                print(f"Already on correct branch {branch_name}")
+                return True
             
-            if branch_exists_locally and branch_exists_remotely:
-                # Both local and remote exist - checkout local and pull updates
-                print(f"Branch {branch_name} exists both locally and remotely - syncing")
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 10
+            if branch_exists:
+                # Branch exists, just switch to it
+                print(f"Branch {branch_name} exists locally, switching to it")
                 result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
-                
                 if result.returncode != 0:
-                    print(f"Failed to checkout local branch {branch_name}. Error: {result.stderr}")
+                    print(f"Failed to checkout existing branch {branch_name}: {result.stderr}")
                     return False
+                print(f"Successfully switched to existing {branch_name}")
+                return True
+            
+            # Step 4: Create new branch from specified source
+            if source_branch:
+                # Create from specified source branch
+                print(f"Creating {branch_name} from {source_branch}")
                 
-                # For stage-1, ensure it's properly based on main/master before pulling
-                if study_stage == 1:
-                    if not self._ensure_stage1_based_on_main(branch_name):
-                        print(f"Warning: Failed to ensure {branch_name} is based on main/master")
-                
-                # Pull updates from remote with merge strategy
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 20
-                result = subprocess.run(['git', 'pull', 'origin', branch_name], **kwargs)
-                
-                if result.returncode != 0:
-                    print(f"Warning: Failed to pull updates from remote {branch_name}. Error: {result.stderr}")
-                    print("Continuing with local branch - manual merge may be required later")
-                else:
-                    print(f"Successfully synchronized {branch_name} with remote")
-                    
-            elif branch_exists_locally:
-                # Only local branch exists - just switch to it
-                print(f"Switching to existing local branch: {branch_name}")
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 10
-                result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
-                
-                if result.returncode != 0:
-                    print(f"Failed to checkout local branch {branch_name}. Error: {result.stderr}")
-                    return False
-                
-                # For stage-1, ensure it's properly based on main/master
-                if study_stage == 1:
-                    if not self._ensure_stage1_based_on_main(branch_name):
-                        print(f"Warning: Failed to ensure {branch_name} is based on main/master")
-                    
-            elif branch_exists_remotely:
-                # Only remote branch exists - create local tracking branch
-                print(f"Creating local branch {branch_name} tracking remote origin/{branch_name}")
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 15
-                result = subprocess.run([
-                    'git', 'checkout', '-b', branch_name, f'origin/{branch_name}'
-                ], **kwargs)
-                
-                if result.returncode != 0:
-                    print(f"Failed to create tracking branch {branch_name}. Error: {result.stderr}")
-                    return False
-                
-                # For stage-1, ensure it's properly based on main/master after checkout
-                if study_stage == 1:
-                    if not self._ensure_stage1_based_on_main(branch_name):
-                        print(f"Warning: Failed to ensure {branch_name} is based on main/master")
-                    
-            else:
-                # Neither local nor remote exist - create new branch from appropriate base
-                print(f"Creating new branch: {branch_name}")
-                
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 10
-                
-                if study_stage == 1:
-                    # Stage-1 should be created from main/master
-                    # First check if we have a remote
-                    result = subprocess.run(['git', 'remote'], **kwargs)
-                    has_remote = bool(result.stdout.strip())
-                    
-                    if has_remote:
-                        # Check if main branch exists (newer repos use 'main')
-                        result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/main'], **kwargs)
-                        base_branch = 'main' if 'origin/main' in result.stdout else 'master'
-                        base_ref = f'origin/{base_branch}'
-                        
-                        # Fetch the latest main/master branch
-                        result = subprocess.run(['git', 'fetch', 'origin', base_branch], **kwargs)
-                        if result.returncode != 0:
-                            print(f"Warning: Failed to fetch {base_branch} branch. Error: {result.stderr}")
-                        
-                        print(f"Creating {branch_name} from remote {base_branch} branch")
-                    else:
-                        # No remote, use local main/master branch
-                        # Check if main branch exists locally
-                        result = subprocess.run(['git', 'branch', '--list', 'main'], **kwargs)
-                        if 'main' in result.stdout:
-                            base_ref = 'main'
-                            base_branch = 'main'
-                        else:
-                            # Check for master branch
-                            result = subprocess.run(['git', 'branch', '--list', 'master'], **kwargs)
-                            if 'master' in result.stdout:
-                                base_ref = 'master'
-                                base_branch = 'master'
-                            else:
-                                print("Error: Neither main nor master branch exists locally")
-                                return False
-                        
-                        print(f"Creating {branch_name} from local {base_branch} branch")
-                    
-                elif study_stage == 2:
-                    # Stage-2 should be created from stage-1
-                    stage1_branch = 'stage-1'
-                    
-                    # Check if stage-1 exists locally or remotely
-                    result = subprocess.run(['git', 'branch', '--list', stage1_branch], **kwargs)
-                    stage1_exists_locally = stage1_branch in result.stdout
-                    
-                    result = subprocess.run(['git', 'branch', '-r', '--list', f'origin/{stage1_branch}'], **kwargs)
-                    stage1_exists_remotely = f'origin/{stage1_branch}' in result.stdout
-                    
-                    if stage1_exists_remotely:
-                        # Fetch latest stage-1 from remote
-                        result = subprocess.run(['git', 'fetch', 'origin', stage1_branch], **kwargs)
-                        if result.returncode != 0:
-                            print(f"Warning: Failed to fetch {stage1_branch} branch. Error: {result.stderr}")
-                        base_ref = f'origin/{stage1_branch}'
-                    elif stage1_exists_locally:
-                        base_ref = stage1_branch
-                    else:
-                        print(f"Error: {stage1_branch} branch does not exist. Cannot create {branch_name}")
+                # Check if source branch exists (local or remote)
+                if source_branch.startswith('origin/'):
+                    # Remote source branch
+                    result = subprocess.run(['git', 'branch', '-r', '--list', source_branch], **kwargs)
+                    if source_branch not in result.stdout:
+                        print(f"Error: {source_branch} branch not found. Cannot create {branch_name}.")
                         return False
-                    
-                    print(f"Creating {branch_name} from {stage1_branch} branch")
-                    
                 else:
-                    print(f"Error: Unsupported study stage: {study_stage}")
-                    return False
+                    # Local source branch
+                    result = subprocess.run(['git', 'branch', '--list', source_branch], **kwargs)
+                    if source_branch not in result.stdout:
+                        print(f"Error: {source_branch} branch not found locally. Cannot create {branch_name}.")
+                        return False
                 
-                # Create new branch from the determined base
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 15
-                result = subprocess.run(['git', 'checkout', '-b', branch_name, base_ref], **kwargs)
-                
+                # Create branch from source
+                result = subprocess.run(['git', 'checkout', '-b', branch_name, source_branch], **kwargs)
                 if result.returncode != 0:
-                    print(f"Failed to create branch {branch_name} from {base_ref}. Error: {result.stderr}")
+                    print(f"Failed to create {branch_name} from {source_branch}: {result.stderr}")
                     return False
                 
-                print(f"Successfully created {branch_name} from {base_ref}")
+                print(f"Successfully created {branch_name} from {source_branch}")
+            else:
+                # Try to create from remote branch with same name
+                remote_branch = f"origin/{branch_name}"
+                result = subprocess.run(['git', 'branch', '-r', '--list', remote_branch], **kwargs)
+                if remote_branch in result.stdout:
+                    # Create from remote branch
+                    print(f"Creating local {branch_name} branch from remote")
+                    result = subprocess.run(['git', 'checkout', '-b', branch_name, remote_branch], **kwargs)
+                    if result.returncode != 0:
+                        print(f"Failed to create {branch_name} from remote: {result.stderr}")
+                        return False
+                    print(f"Successfully created and switched to {branch_name} branch")
+                else:
+                    print(f"Error: {remote_branch} branch not found. {branch_name} branch must exist on remote or source_branch must be specified.")
+                    return False
             
-            print(f"Successfully ensured branch {branch_name} is active for stage {study_stage}")
+            print(f"Successfully ensured branch {branch_name} is active")
             return True
             
         except Exception as e:
-            print(f"Error ensuring stage branch: {str(e)}")
+            print(f"Error ensuring branch: {str(e)}")
             return False
         finally:
             try:
                 os.chdir(original_cwd)
             except Exception as e:
                 print(f"Warning: Failed to restore working directory: {str(e)}")
-    
-    def _ensure_stage1_based_on_main(self, branch_name: str) -> bool:
+
+    def ensure_stage_branch(self, repo_path: str, study_stage: int, participant_id: str = None, 
+                           github_token: Optional[str] = None, github_org: str = None, 
+                           skip_backup: bool = False) -> bool:
         """
-        Ensure that a stage-1 branch is properly based on main/master branch.
-        This method checks if the stage-1 branch has the latest main/master changes
-        and resets it if necessary to ensure it starts from the correct base.
+        Ensure the correct branch exists and is checked out for the given study stage.
+        Uses simplified, deterministic approach:
+        - stage-1: Always created from remote main branch
+        - stage-2: Always created from local stage-1 branch
         
         Args:
-            branch_name: Name of the stage-1 branch
+            repo_path: Path to the repository
+            study_stage: The study stage (1 or 2)
+            participant_id: Participant ID for backup operations (optional)
+            github_token: GitHub token for backup operations (optional)
+            github_org: GitHub organization for backup operations (optional)
+            skip_backup: Skip backup operations (used when already on correct branch)
         
         Returns:
             True if successful, False otherwise
         """
-        try:
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 10
-            
-            # Check if we have a remote
-            result = subprocess.run(['git', 'remote'], **kwargs)
-            has_remote = bool(result.stdout.strip())
-            
-            if has_remote:
-                # Determine which base branch to use (main or master) from remote
-                result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/main'], **kwargs)
-                base_branch = 'main' if 'origin/main' in result.stdout else 'master'
-                base_ref = f'origin/{base_branch}'
-                
-                # Fetch the latest base branch
-                result = subprocess.run(['git', 'fetch', 'origin', base_branch], **kwargs)
-                if result.returncode != 0:
-                    print(f"Warning: Failed to fetch {base_branch} branch. Error: {result.stderr}")
-                    return False
-            else:
-                # No remote, use local main/master branch
-                result = subprocess.run(['git', 'branch', '--list', 'main'], **kwargs)
-                if 'main' in result.stdout:
-                    base_branch = 'main'
-                    base_ref = 'main'
-                else:
-                    result = subprocess.run(['git', 'branch', '--list', 'master'], **kwargs)
-                    if 'master' in result.stdout:
-                        base_branch = 'master'
-                        base_ref = 'master'
-                    else:
-                        print("Error: Neither main nor master branch exists locally")
-                        return False
-            
-            # Check if stage-1 branch has commits that main/master doesn't have
-            # This helps us determine if stage-1 was created from a different branch (like tutorial)
-            result = subprocess.run([
-                'git', 'rev-list', '--count', f'{base_ref}..{branch_name}'
-            ], **kwargs)
-            
-            if result.returncode != 0:
-                print(f"Warning: Failed to check branch divergence. Error: {result.stderr}")
-                return False
-            
-            commits_ahead = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
-            
-            # Check if main/master has commits that stage-1 doesn't have
-            result = subprocess.run([
-                'git', 'rev-list', '--count', f'{branch_name}..{base_ref}'
-            ], **kwargs)
-            
-            if result.returncode != 0:
-                print(f"Warning: Failed to check branch behind count. Error: {result.stderr}")
-                return False
-            
-            commits_behind = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
-            
-            # If stage-1 is behind main/master, we should update it
-            if commits_behind > 0:
-                print(f"Stage-1 branch is {commits_behind} commits behind {base_branch}. Updating...")
-                
-                # If stage-1 has its own commits, we need to be careful about preserving work
-                if commits_ahead > 0:
-                    print(f"Stage-1 branch has {commits_ahead} commits ahead of {base_branch}. Attempting to rebase...")
-                    
-                    # Try to rebase stage-1 onto main/master
-                    result = subprocess.run([
-                        'git', 'rebase', base_ref
-                    ], **kwargs)
-                    
-                    if result.returncode == 0:
-                        print(f"Successfully rebased {branch_name} onto {base_branch}")
-                        return True
-                    else:
-                        print(f"Rebase failed: {result.stderr}")
-                        # Abort the rebase and try merge instead
-                        subprocess.run(['git', 'rebase', '--abort'], **kwargs)
-                        
-                        print(f"Attempting to merge {base_branch} into {branch_name}...")
-                        result = subprocess.run([
-                            'git', 'merge', base_ref
-                        ], **kwargs)
-                        
-                        if result.returncode == 0:
-                            print(f"Successfully merged {base_branch} into {branch_name}")
-                            return True
-                        else:
-                            print(f"Merge also failed: {result.stderr}")
-                            return False
-                else:
-                    # No commits ahead, safe to reset to main/master
-                    print(f"Resetting {branch_name} to match {base_branch}")
-                    result = subprocess.run([
-                        'git', 'reset', '--hard', base_ref
-                    ], **kwargs)
-                    
-                    if result.returncode == 0:
-                        print(f"Successfully reset {branch_name} to {base_branch}")
-                        return True
-                    else:
-                        print(f"Failed to reset branch: {result.stderr}")
-                        return False
-            else:
-                print(f"Stage-1 branch is up to date with {base_branch}")
-                return True
-                
-        except Exception as e:
-            print(f"Error ensuring stage-1 is based on main: {str(e)}")
+        branch_name = f"stage-{study_stage}"
+        
+        if study_stage == 1:
+            # Stage-1: Always create from remote main branch
+            source_branch = "origin/main"
+        elif study_stage == 2:
+            # Stage-2: Always create from local stage-1 branch
+            source_branch = "stage-1"
+        else:
+            print(f"Error: Unsupported study stage: {study_stage}")
             return False
+        
+        return self.ensure_branch(
+            repo_path=repo_path,
+            branch_name=branch_name,
+            source_branch=source_branch,
+            participant_id=participant_id,
+            github_token=github_token,
+            github_org=github_org,
+            skip_backup=skip_backup
+        )
     
     def setup_repository_for_stage(self, participant_id: str, study_stage: int, 
                                  development_mode: bool, github_token: Optional[str], 
                                  github_org: str) -> bool:
         """
         Set up the repository for a specific study stage by ensuring the correct branch is active.
-        This should be called when a participant starts working on a specific stage.
+        This should ONLY be called when a participant starts working on a stage from the task page.
+        After this, participants are free to work on any branch they choose.
         
         Args:
             participant_id: The participant's unique identifier
@@ -553,25 +384,25 @@ class RepositoryManager:
         # Ensure git config is set up
         self.ensure_git_config(repo_path, participant_id)
         
-        # Ensure the correct stage branch is active
-        if not self.ensure_stage_branch(repo_path, study_stage):
+        # Ensure the correct stage branch is active (with backup support for initial setup)
+        if not self.ensure_stage_branch(repo_path, study_stage, participant_id, github_token, github_org):
             print(f"Failed to set up branch for stage {study_stage}")
             return False
         
         print(f"Repository successfully set up for stage {study_stage}")
         return True
     
-    def commit_code_changes(self, participant_id: str, study_stage: int, commit_message: str,
-                          development_mode: bool, github_token: Optional[str], 
-                          github_org: str) -> bool:
+    def commit_and_backup_all(self, participant_id: str, study_stage: Optional[int], commit_message: str,
+                             development_mode: bool, github_token: Optional[str], 
+                             github_org: str) -> bool:
         """
-        Commit any changes in the participant's repository with a descriptive message.
-        Ensures the correct stage branch is being used and pushes to that branch.
-        Handles remote synchronization to avoid conflicts.
+        Unified method to commit changes on current branch and backup all branches.
+        This is the main method called when requirements are completed or timer expires.
+        Can also be used for tutorial completion by passing study_stage=None.
         
         Args:
             participant_id: The participant's unique identifier
-            study_stage: The study stage (1 or 2)
+            study_stage: The study stage (1 or 2) - used for logging purposes (None for tutorial)
             commit_message: Message for the commit
             development_mode: Whether running in development mode
             github_token: GitHub personal access token (optional)
@@ -581,7 +412,7 @@ class RepositoryManager:
             True if successful, False otherwise
         """
         repo_path = self.get_repository_path(participant_id, development_mode)
-        original_cwd = os.getcwd()  # Save current working directory
+        original_cwd = os.getcwd()
         
         try:
             # Check if repository exists
@@ -601,11 +432,45 @@ class RepositoryManager:
             # Change to repository directory
             os.chdir(repo_path)
             
-            # Ensure we're on the correct stage branch (this now handles remote sync)
-            if not self.ensure_stage_branch(repo_path, study_stage):
-                print(f"Failed to ensure stage branch for stage {study_stage}")
+            # Step 1: Commit any changes on the current branch
+            success = self._commit_current_branch_changes(study_stage, commit_message)
+            if not success:
+                print("Failed to commit changes on current branch")
                 return False
             
+            # Step 2: Push all branches to remote as backup (if we have authentication)
+            if github_token:
+                success = self._push_all_branches_backup(participant_id, github_token, github_org)
+                if not success:
+                    print("Warning: Failed to backup all branches to remote")
+                    # Don't return False here - local commit succeeded
+            else:
+                print("No GitHub token provided - changes committed locally only")
+            
+            print(f"Successfully completed commit and backup workflow for {participant_id}")
+            return True
+            
+        except Exception as e:
+            print(f"Error in commit and backup workflow: {str(e)}")
+            return False
+        finally:
+            try:
+                os.chdir(original_cwd)
+            except Exception as e:
+                print(f"Warning: Failed to restore original working directory: {str(e)}")
+    
+    def _commit_current_branch_changes(self, study_stage: Optional[int], commit_message: str) -> bool:
+        """
+        Commit any changes on the current branch.
+        
+        Args:
+            study_stage: The study stage for logging (optional, for tutorial use None)
+            commit_message: Message for the commit
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
             # Check if there are any changes to commit
             kwargs = self._get_subprocess_kwargs()
             kwargs['timeout'] = 10
@@ -618,243 +483,143 @@ class RepositoryManager:
             has_changes = bool(result.stdout.strip())
             
             if not has_changes:
-                print("No changes to commit")
+                print("No changes to commit on current branch")
                 return True
             
-            # Add all changes
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 10
-            result = subprocess.run([
-                'git', 'add', '.'
-            ], **kwargs)
+            # Get current branch name for logging
+            result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
+            current_branch = result.stdout.strip() if result.returncode == 0 else "unknown"
             
+            # Add all changes
+            result = subprocess.run(['git', 'add', '.'], **kwargs)
             if result.returncode != 0:
                 print(f"Failed to add changes. Error: {result.stderr}")
                 return False
             
-            # Create timestamp for commit
+            # Create commit message with timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            full_commit_message = f"[Stage {study_stage}] {commit_message} - {timestamp}"
+            if study_stage is not None:
+                full_commit_message = f"[Stage {study_stage}] {commit_message} - {timestamp}"
+            else:
+                full_commit_message = f"{commit_message} - {timestamp}"
             
             # Commit changes
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 10
-            result = subprocess.run([
-                'git', 'commit', '-m', full_commit_message
-            ], **kwargs)
-            
+            result = subprocess.run(['git', 'commit', '-m', full_commit_message], **kwargs)
             if result.returncode != 0:
                 print(f"Failed to commit changes. Error: {result.stderr}")
                 return False
             
-            print(f"Successfully committed changes: {full_commit_message}")
+            print(f"Successfully committed changes on branch '{current_branch}': {full_commit_message}")
+            return True
             
-            # Push changes to remote repository if we have authentication
-            if github_token:
-                return self._push_with_retry(participant_id, study_stage, github_token, github_org)
-            else:
-                print("No GitHub token provided - changes committed locally only")
-                return True
-            
-        except subprocess.TimeoutExpired:
-            print("Git operation timed out")
-            return False
         except Exception as e:
-            print(f"Error committing code changes: {str(e)}")
+            print(f"Error committing current branch changes: {str(e)}")
             return False
-        finally:
-            # Always restore the original working directory
-            try:
-                os.chdir(original_cwd)
-            except Exception as e:
-                print(f"Warning: Failed to restore original working directory: {str(e)}")
     
-    def _push_with_retry(self, participant_id: str, study_stage: int, 
-                        github_token: str, github_org: str, max_retries: int = 3) -> bool:
+    def _push_all_branches_backup(self, participant_id: str, github_token: str, github_org: str) -> bool:
         """
-        Push changes with retry logic and conflict resolution.
+        Push all local branches to remote as backup.
         
         Args:
             participant_id: The participant's unique identifier
-            study_stage: The study stage (1 or 2)
             github_token: GitHub personal access token
             github_org: GitHub organization name
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Set up authenticated remote URL
+            repo_name = f"study-{participant_id}"
+            authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
+            
+            kwargs = self._get_subprocess_kwargs()
+            kwargs['timeout'] = 10
+            result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
+            if result.returncode != 0:
+                print(f"Warning: Failed to set authenticated remote URL: {result.stderr}")
+            
+            # Get list of all local branches
+            result = subprocess.run(['git', 'branch', '--format=%(refname:short)'], **kwargs)
+            if result.returncode != 0:
+                print(f"Failed to get list of local branches: {result.stderr}")
+                return False
+            
+            local_branches = [branch.strip() for branch in result.stdout.strip().split('\n') if branch.strip()]
+            
+            if not local_branches:
+                print("No local branches found to backup")
+                return True
+            
+            print(f"Backing up {len(local_branches)} branches to remote...")
+            
+            # Push each branch with retry logic
+            success_count = 0
+            for branch in local_branches:
+                if self._push_branch_with_retry(branch, max_retries=2):
+                    success_count += 1
+                    print(f"Successfully backed up branch: {branch}")
+                else:
+                    print(f"Warning: Failed to backup branch: {branch}")
+            
+            print(f"Backup completed: {success_count}/{len(local_branches)} branches backed up successfully")
+            return success_count > 0  # Success if at least one branch was backed up
+            
+        except Exception as e:
+            print(f"Error backing up all branches: {str(e)}")
+            return False
+    
+    def _push_branch_with_retry(self, branch_name: str, max_retries: int = 2) -> bool:
+        """
+        Push a specific branch with simple retry logic.
+        
+        Args:
+            branch_name: Name of the branch to push
             max_retries: Maximum number of retry attempts
         
         Returns:
             True if successful, False otherwise
         """
-        branch_name = f"stage-{study_stage}"
-        
         for attempt in range(max_retries):
             try:
-                # Set up the authenticated remote URL
-                repo_name = f"study-{participant_id}"
-                authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
-                
-                # Update the origin URL to use authentication
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 10
-                result = subprocess.run([
-                    'git', 'remote', 'set-url', 'origin', authenticated_url
-                ], **kwargs)
-                
-                if result.returncode != 0:
-                    print(f"Warning: Failed to set authenticated remote URL. Error: {result.stderr}")
-                
-                # Attempt to push changes to the stage-specific branch
                 kwargs = self._get_subprocess_kwargs()
                 kwargs['timeout'] = 30
-                result = subprocess.run([
-                    'git', 'push', 'origin', branch_name
-                ], **kwargs)
+                result = subprocess.run(['git', 'push', 'origin', branch_name], **kwargs)
                 
                 if result.returncode == 0:
-                    print(f"Successfully pushed changes to remote repository branch: {branch_name}")
                     return True
                 else:
-                    error_msg = result.stderr.lower()
-                    if 'rejected' in error_msg or 'non-fast-forward' in error_msg:
-                        print(f"Push rejected (attempt {attempt + 1}/{max_retries}). Trying to sync with remote...")
-                        
-                        # Try to pull and merge remote changes
-                        if self._sync_with_remote_branch(branch_name):
-                            print("Successfully synced with remote. Retrying push...")
-                            continue
-                        else:
-                            print("Failed to sync with remote branch")
-                            if attempt == max_retries - 1:
-                                return False
-                    else:
-                        print(f"Push failed with error: {result.stderr}")
-                        if attempt == max_retries - 1:
-                            return False
+                    print(f"Push failed for {branch_name} (attempt {attempt + 1}/{max_retries}): {result.stderr}")
+                    if attempt < max_retries - 1:
+                        # Try to fetch and retry on next attempt
+                        fetch_result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
+                        if fetch_result.returncode != 0:
+                            print(f"Failed to fetch before retry: {fetch_result.stderr}")
                         
             except subprocess.TimeoutExpired:
-                print(f"Push operation timed out (attempt {attempt + 1}/{max_retries})")
-                if attempt == max_retries - 1:
-                    return False
+                print(f"Push timeout for {branch_name} (attempt {attempt + 1}/{max_retries})")
             except Exception as e:
-                print(f"Error during push attempt {attempt + 1}: {str(e)}")
-                if attempt == max_retries - 1:
-                    return False
+                print(f"Error pushing {branch_name} (attempt {attempt + 1}/{max_retries}): {str(e)}")
         
         return False
-    
-    def _sync_with_remote_branch(self, branch_name: str) -> bool:
+
+    def ensure_tutorial_branch(self, repo_path: str) -> bool:
         """
-        Sync local branch with remote branch by pulling and merging changes.
+        Ensure tutorial branch is checked out.
+        Uses simplified, deterministic approach: tutorial branch must exist on remote.
         
         Args:
-            branch_name: Name of the branch to sync
+            repo_path: Path to the repository
         
         Returns:
             True if successful, False otherwise
         """
-        try:
-            # Fetch latest changes
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 15
-            result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
-            
-            if result.returncode != 0:
-                print(f"Failed to fetch from remote: {result.stderr}")
-                return False
-            
-            # Try to pull and merge
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 20
-            result = subprocess.run(['git', 'pull', 'origin', branch_name], **kwargs)
-            
-            if result.returncode == 0:
-                print(f"Successfully merged remote changes for {branch_name}")
-                return True
-            else:
-                # If automatic merge fails, try to resolve with merge strategy
-                print(f"Automatic merge failed, trying merge strategy: {result.stderr}")
-                
-                # Reset to try a different approach
-                result = subprocess.run(['git', 'merge', '--abort'], **kwargs)
-                
-                # Try merge with strategy favoring our changes
-                result = subprocess.run([
-                    'git', 'pull', 'origin', branch_name, '--strategy=recursive', '--strategy-option=ours'
-                ], **kwargs)
-                
-                if result.returncode == 0:
-                    print(f"Successfully resolved merge conflicts for {branch_name}")
-                    return True
-                else:
-                    print(f"Failed to resolve merge conflicts: {result.stderr}")
-                    return False
-                    
-        except Exception as e:
-            print(f"Error syncing with remote branch: {str(e)}")
-            return False
-    
-    def push_code_changes(self, participant_id: str, study_stage: int, development_mode: bool,
-                        github_token: Optional[str], github_org: str) -> bool:
-        """
-        Push committed changes to the remote repository on the correct stage branch.
-        Uses enhanced retry logic and conflict resolution.
-        
-        Args:
-            participant_id: The participant's unique identifier
-            study_stage: The study stage (1 or 2)
-            development_mode: Whether running in development mode
-            github_token: GitHub personal access token (optional)
-            github_org: GitHub organization name
-        
-        Returns:
-            True if successful, False otherwise
-        """
-        repo_path = self.get_repository_path(participant_id, development_mode)
-        original_cwd = os.getcwd()  # Save current working directory
-        
-        try:
-            # Check if repository exists
-            if not os.path.exists(repo_path):
-                print(f"Repository does not exist at: {repo_path}")
-                return False
-            
-            # Check if it's a valid git repository
-            git_dir = os.path.join(repo_path, '.git')
-            if not os.path.exists(git_dir):
-                print(f"Not a valid git repository: {repo_path}")
-                return False
-            
-            # Change to repository directory
-            os.chdir(repo_path)
-            
-            # Ensure we're on the correct stage branch (this now handles remote sync)
-            if not self.ensure_stage_branch(repo_path, study_stage):
-                print(f"Failed to ensure stage branch for stage {study_stage}")
-                return False
-            
-            # Use enhanced push with retry logic if we have a token
-            if github_token:
-                return self._push_with_retry(participant_id, study_stage, github_token, github_org)
-            else:
-                print("No GitHub token provided - cannot push to remote")
-                return False
-            
-        except subprocess.TimeoutExpired:
-            print("Git push operation timed out")
-            return False
-        except Exception as e:
-            print(f"Error pushing code changes: {str(e)}")
-            return False
-        finally:
-            # Always restore the original working directory
-            try:
-                os.chdir(original_cwd)
-            except Exception as e:
-                print(f"Warning: Failed to restore original working directory: {str(e)}")
+        return self.ensure_branch(repo_path=repo_path, branch_name="tutorial")
 
     def setup_tutorial_branch(self, participant_id: str, development_mode: bool,
                              github_token: str, github_org: str) -> bool:
         """
-        Set up tutorial branch for participant.
+        Set up tutorial branch for participant using simplified approach.
         
         Args:
             participant_id: The participant ID
@@ -881,57 +646,9 @@ class RepositoryManager:
             if not self.ensure_git_config(repo_path, participant_id):
                 print(f"Failed to set up git config for tutorial")
                 return False
-                
-            # Create and checkout tutorial branch
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['cwd'] = repo_path
             
-            # First, fetch all remote branches to ensure we have the latest refs
-            result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
-            if result.returncode != 0:
-                print(f"Warning: Failed to fetch from origin: {result.stderr}")
-            
-            # Check if tutorial branch exists locally
-            result = subprocess.run(['git', 'branch', '--list', 'tutorial'], **kwargs)
-            local_tutorial_exists = bool(result.stdout.strip())
-            
-            # Check if tutorial branch exists remotely
-            result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/tutorial'], **kwargs)
-            remote_tutorial_exists = bool(result.stdout.strip())
-            
-            if local_tutorial_exists:
-                # Local tutorial branch exists, just switch to it
-                result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
-                if result.returncode != 0:
-                    print(f"Failed to checkout existing tutorial branch: {result.stderr}")
-                    return False
-                print(f"Switched to existing local tutorial branch for {participant_id}")
-                
-                # If remote also exists, pull any updates
-                if remote_tutorial_exists:
-                    result = subprocess.run(['git', 'pull', 'origin', 'tutorial'], **kwargs)
-                    if result.returncode != 0:
-                        print(f"Warning: Failed to pull tutorial branch updates: {result.stderr}")
-                    else:
-                        print(f"Updated tutorial branch from remote for {participant_id}")
-                        
-            elif remote_tutorial_exists:
-                # Remote tutorial branch exists but not local, checkout from remote
-                result = subprocess.run(['git', 'checkout', '-b', 'tutorial', 'origin/tutorial'], **kwargs)
-                if result.returncode != 0:
-                    print(f"Failed to checkout tutorial branch from remote: {result.stderr}")
-                    return False
-                print(f"Checked out tutorial branch from remote for {participant_id}")
-                
-            else:
-                # Neither local nor remote tutorial branch exists, create new one
-                result = subprocess.run(['git', 'checkout', '-b', 'tutorial'], **kwargs)
-                if result.returncode != 0:
-                    print(f"Failed to create new tutorial branch: {result.stderr}")
-                    return False
-                print(f"Created new tutorial branch for {participant_id}")
-            
-            return True
+            # Use the simplified tutorial branch method
+            return self.ensure_tutorial_branch(repo_path)
             
         except Exception as e:
             print(f"Error setting up tutorial branch: {str(e)}")
@@ -941,7 +658,7 @@ class RepositoryManager:
                           github_token: str, github_org: str) -> bool:
         """
         Push tutorial code to remote tutorial branch.
-        Uses enhanced retry logic and conflict resolution.
+        This is now a simple wrapper around commit_and_backup_all for tutorial completion.
         
         Args:
             participant_id: The participant ID
@@ -959,20 +676,15 @@ class RepositoryManager:
                 print(f"Repository does not exist for tutorial push: {repo_path}")
                 return False
             
+            # Ensure we're on tutorial branch before committing
             original_cwd = os.getcwd()
             os.chdir(repo_path)
             
             try:
-                # Ensure we're on tutorial branch and sync with remote
+                # Make sure we're on the tutorial branch
                 kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 15
+                kwargs['timeout'] = 10
                 
-                # Fetch latest refs
-                result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
-                if result.returncode != 0:
-                    print(f"Warning: Failed to fetch from remote: {result.stderr}")
-                
-                # Ensure we're on tutorial branch
                 result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
                 if result.returncode != 0:
                     print(f"Failed to check current branch: {result.stderr}")
@@ -987,6 +699,10 @@ class RepositoryManager:
                         return False
                 
                 # Sync with remote tutorial branch if it exists
+                result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
+                if result.returncode != 0:
+                    print(f"Warning: Failed to fetch from remote: {result.stderr}")
+                
                 result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/tutorial'], **kwargs)
                 if result.stdout.strip():
                     # Remote tutorial branch exists, pull updates
@@ -994,107 +710,24 @@ class RepositoryManager:
                     if result.returncode != 0:
                         print(f"Warning: Failed to pull tutorial updates: {result.stderr}")
                 
-                # Check if there are any changes to commit
-                result = subprocess.run(['git', 'status', '--porcelain'], **kwargs)
-                if result.returncode != 0:
-                    print(f"Failed to check git status: {result.stderr}")
-                    return False
-                    
-                has_changes = bool(result.stdout.strip())
-                
-                if has_changes:
-                    # Add all changes
-                    result = subprocess.run(['git', 'add', '.'], **kwargs)
-                    if result.returncode != 0:
-                        print(f"Failed to add tutorial changes: {result.stderr}")
-                        return False
-                    
-                    # Commit changes
-                    commit_message = f"Tutorial completion - {participant_id}"
-                    result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
-                    if result.returncode != 0:
-                        print(f"Failed to commit tutorial changes: {result.stderr}")
-                        return False
-                    
-                    print(f"Committed tutorial changes for {participant_id}")
-                
-                # Use enhanced push with retry logic
-                return self._push_tutorial_with_retry(participant_id, github_token, github_org)
-                
             finally:
                 os.chdir(original_cwd)
+            
+            # Use the unified commit and backup method with tutorial-specific message
+            commit_message = f"Tutorial completion - {participant_id}"
+            return self.commit_and_backup_all(
+                participant_id=participant_id,
+                study_stage=None,  # None indicates tutorial, not a numbered stage
+                commit_message=commit_message,
+                development_mode=development_mode,
+                github_token=github_token,
+                github_org=github_org
+            )
             
         except Exception as e:
             print(f"Error pushing tutorial code: {str(e)}")
             return False
     
-    def _push_tutorial_with_retry(self, participant_id: str, github_token: str, 
-                                 github_org: str, max_retries: int = 3) -> bool:
-        """
-        Push tutorial code with retry logic and conflict resolution.
-        
-        Args:
-            participant_id: The participant's unique identifier
-            github_token: GitHub personal access token
-            github_org: GitHub organization name
-            max_retries: Maximum number of retry attempts
-        
-        Returns:
-            True if successful, False otherwise
-        """
-        for attempt in range(max_retries):
-            try:
-                # Set up the authenticated remote URL
-                repo_name = f"study-{participant_id}"
-                authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
-                
-                # Update the origin URL to use authentication
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 10
-                result = subprocess.run([
-                    'git', 'remote', 'set-url', 'origin', authenticated_url
-                ], **kwargs)
-                
-                if result.returncode != 0:
-                    print(f"Warning: Failed to set authenticated remote URL: {result.stderr}")
-                
-                # Attempt to push tutorial branch
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 30
-                result = subprocess.run(['git', 'push', 'origin', 'tutorial'], **kwargs)
-                
-                if result.returncode == 0:
-                    print(f"Successfully pushed tutorial code for {participant_id}")
-                    return True
-                else:
-                    error_msg = result.stderr.lower()
-                    if 'rejected' in error_msg or 'non-fast-forward' in error_msg:
-                        print(f"Tutorial push rejected (attempt {attempt + 1}/{max_retries}). Trying to sync with remote...")
-                        
-                        # Try to sync with remote tutorial branch
-                        if self._sync_with_remote_branch('tutorial'):
-                            print("Successfully synced tutorial with remote. Retrying push...")
-                            continue
-                        else:
-                            print("Failed to sync tutorial with remote branch")
-                            if attempt == max_retries - 1:
-                                return False
-                    else:
-                        print(f"Tutorial push failed with error: {result.stderr}")
-                        if attempt == max_retries - 1:
-                            return False
-                        
-            except subprocess.TimeoutExpired:
-                print(f"Tutorial push operation timed out (attempt {attempt + 1}/{max_retries})")
-                if attempt == max_retries - 1:
-                    return False
-            except Exception as e:
-                print(f"Error during tutorial push attempt {attempt + 1}: {str(e)}")
-                if attempt == max_retries - 1:
-                    return False
-        
-        return False
-
 
 class VSCodeManager:
     """
@@ -1156,9 +789,9 @@ class VSCodeManager:
                 print(f"Repository does not exist at: {repo_path}")
                 return False
             
-            # If study_stage is provided, ensure the correct branch is active
+            # If study_stage is provided, ensure the correct branch is active (skip backup for VS Code opening)
             if study_stage is not None:
-                if not self.repository_manager.ensure_stage_branch(repo_path, study_stage):
+                if not self.repository_manager.ensure_stage_branch(repo_path, study_stage, skip_backup=True):
                     print(f"Warning: Failed to ensure correct branch for stage {study_stage}")
             
             # Try to open VS Code with the repository
@@ -1227,13 +860,9 @@ class VSCodeManager:
                 print(f"Repository does not exist at: {repo_path}")
                 return False
             
-            # Ensure we're on tutorial branch
-            kwargs = self.repository_manager._get_subprocess_kwargs()
-            kwargs['cwd'] = repo_path
-            
-            result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
-            if result.returncode != 0:
-                print(f"Failed to checkout tutorial branch: {result.stderr}")
+            # Ensure we're on tutorial branch using simplified method
+            if not self.repository_manager.ensure_tutorial_branch(repo_path):
+                print(f"Failed to ensure tutorial branch")
                 return False
             
             # Try to open VS Code with the repository

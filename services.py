@@ -142,8 +142,10 @@ def commit_code_changes(participant_id, study_stage, commit_message, development
 
 def push_code_changes(participant_id, study_stage, development_mode, github_token, github_org):
     """Push committed changes to the remote repository."""
-    return _repository_manager.push_code_changes(
-        participant_id, study_stage, development_mode, github_token, github_org
+    # Use unified commit_and_backup_all method with a default commit message
+    commit_message = f"Auto-commit for stage {study_stage} push operation"
+    return _repository_manager.commit_and_backup_all(
+        participant_id, study_stage, commit_message, development_mode, github_token, github_org
     )
 
 
