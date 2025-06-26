@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, Callable
 from datetime import datetime
 from .github_service import GitHubService
 from .study_logger import StudyLogger
+import services
 
 
 class GitHubOperation:
@@ -151,10 +152,8 @@ class AsyncGitHubService:
     def _process_commit_code_changes(self, operation: GitHubOperation) -> bool:
         """Process code commit operation."""
         try:
-            # Import repository manager to avoid circular imports
-            from .repository_manager import RepositoryManager
-            repo_manager = RepositoryManager(self.github_service)
-            return repo_manager.commit_code_changes(
+            # Import the repository manager from services to get the shared instance
+            return services._repository_manager.commit_and_backup_all(
                 participant_id=operation.participant_id,
                 study_stage=operation.kwargs.get('study_stage'),
                 commit_message=operation.kwargs.get('commit_message'),
@@ -210,10 +209,8 @@ class AsyncGitHubService:
     def _process_push_tutorial_code(self, operation: GitHubOperation) -> bool:
         """Process tutorial code push operation."""
         try:
-            # Import repository manager to avoid circular imports
-            from .repository_manager import RepositoryManager
-            repo_manager = RepositoryManager(self.github_service)
-            return repo_manager.push_tutorial_code(
+            # Import the repository manager from services to get the shared instance
+            return services._repository_manager.push_tutorial_code(
                 participant_id=operation.participant_id,
                 development_mode=operation.kwargs.get('development_mode'),
                 github_token=operation.kwargs.get('github_token'),
