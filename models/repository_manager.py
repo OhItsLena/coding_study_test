@@ -865,6 +865,32 @@ class VSCodeManager:
                 print(f"Failed to ensure tutorial branch")
                 return False
             
+            # Double-check that we're actually on the tutorial branch before opening VS Code
+            # This prevents issues if other operations (like logging) switched branches
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(repo_path)
+                kwargs = self._get_subprocess_kwargs()
+                kwargs['timeout'] = 5
+                
+                # Verify current branch
+                result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
+                if result.returncode == 0:
+                    current_branch = result.stdout.strip()
+                    if current_branch != 'tutorial':
+                        print(f"Warning: Repository is on '{current_branch}' branch instead of 'tutorial'. Switching to tutorial branch.")
+                        checkout_result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
+                        if checkout_result.returncode != 0:
+                            print(f"Failed to checkout tutorial branch: {checkout_result.stderr}")
+                            return False
+                        print("Successfully switched to tutorial branch")
+                    else:
+                        print("Confirmed: Repository is on tutorial branch")
+                else:
+                    print(f"Warning: Could not verify current branch: {result.stderr}")
+            finally:
+                os.chdir(original_cwd)
+            
             # Try to open VS Code with the repository
             print(f"Opening VS Code with tutorial branch: {repo_path}")
             
