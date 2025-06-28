@@ -16,14 +16,22 @@ h1 {
     position: fixed;
     top: 20px;
     right: 20px;
-    background: rgba(255, 255, 255, 0.9);
-    color: #6c757d;
-    font-size: 0.85em;
-    padding: 8px 12px;
-    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #495057;
+    font-size: 1em;
+    font-weight: 500;
+    padding: 10px 16px;
+    border-radius: 8px;
     font-family: 'Courier New', monospace;
     z-index: 1000;
     backdrop-filter: blur(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+.subtle-stopwatch.warning {
+    background: rgba(220, 53, 69, 0.95);
+    color: white;
+    box-shadow: 0 2px 12px rgba(220, 53, 69, 0.3);
 }
 .timer-modal {
     display: none;
@@ -281,9 +289,9 @@ h1 {
     <h1>Coding Task</h1>
     <div class="participant-id">Participant ID: {{ participant_id }}</div>
     
-    <!-- Subtle stopwatch in upper right corner -->
+    <!-- Subtle countdown timer in upper right corner -->
     <div id="subtle-stopwatch" class="subtle-stopwatch">
-        <span id="elapsed-time">00:00</span>
+        <span id="elapsed-time">40:00</span>
     </div>
     
     <p>Now please use <strong>{% if coding_condition == 'vibe' %}Vibe Coding{% elif coding_condition == 'ai-assisted' %}AI-Assisted Coding{% else %}{{ coding_condition }}{% endif %}</strong> to implement a <strong>PDF Merger Tool</strong>.</p>
@@ -428,34 +436,50 @@ h1 {
 </div>
 
 <script>
-let elapsedTime = {{ 40 * 60 - remaining_time }}; // Calculate elapsed time from remaining time
+let remainingTime = {{ remaining_time }}; // Use remaining time directly
 let timerFinished = {{ timer_finished|lower }};
 let modalShown = false;
 
-function formatElapsedTime(seconds) {
+function formatTime(seconds) {
     const minutes = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-function updateStopwatch() {
-    const stopwatchDisplay = document.getElementById('elapsed-time');
-    stopwatchDisplay.textContent = formatElapsedTime(elapsedTime);
+function updateTimer() {
+    const timerDisplay = document.getElementById('elapsed-time');
+    const timerElement = document.getElementById('subtle-stopwatch');
+    
+    // Update display
+    timerDisplay.textContent = formatTime(Math.max(0, remainingTime));
+    
+    // Check if we're in the last 10% of time (last 4 minutes)
+    const totalTime = 40 * 60; // 40 minutes in seconds
+    const warningThreshold = totalTime * 0.1; // 10% of total time
+    
+    if (remainingTime <= warningThreshold && remainingTime > 0) {
+        timerElement.classList.add('warning');
+    } else {
+        timerElement.classList.remove('warning');
+    }
 }
 
-function startStopwatch() {
-    updateStopwatch();
+function startTimer() {
+    updateTimer();
     
-    const stopwatchInterval = setInterval(() => {
-        elapsedTime += 1;
-        updateStopwatch();
+    const timerInterval = setInterval(() => {
+        if (remainingTime > 0) {
+            remainingTime -= 1;
+            updateTimer();
+        }
         
-        // Stop at 40 minutes (2400 seconds) if needed
-        if (elapsedTime >= 2400 && !timerFinished) {
+        // Show modal when time runs out
+        if (remainingTime <= 0 && !timerFinished) {
             if (!modalShown) {
                 showTimerModal();
                 modalShown = true;
             }
+            clearInterval(timerInterval);
         }
     }, 1000);
 }
@@ -547,13 +571,13 @@ window.addEventListener('click', function(event) {
     }
 });
 
-// Start the stopwatch when page loads
+// Start the timer when page loads
 document.addEventListener('DOMContentLoaded', function() {
     if (timerFinished) {
         disableNewTasks();
     }
     
-    startStopwatch();
+    startTimer();
 });
 </script>
 {% endblock %}
