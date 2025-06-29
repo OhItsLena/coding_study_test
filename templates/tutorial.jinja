@@ -73,29 +73,30 @@ h1 {
     margin: 0 0 10px 0;
     font-size: 1em;
 }
+.open-vscode-btn {
+    color: #17a2b8;
+    font-size: 0.9em;
+}
+.open-vscode-btn:hover {
+    color: #138496;
+    text-decoration: underline;
+}
 {% endblock %}
 
 {% block content %}
 <div class="tutorial-card">
-    <h1>{{ tutorial.title if tutorial else 'Coding Tutorial' }}</h1>
+    <h1>Coding Tutorial</h1>
     <div class="participant-id">Participant ID: {{ participant_id }}</div>
     
-    <p>You've been assigned <strong>{% if coding_condition == 'vibe' %}Vibe Coding{% elif coding_condition == 'ai-assisted' %}AI-Assisted Coding{% else %}{{ coding_condition }}{% endif %}</strong> as a coding paradigm for this study.</p>
     <div class="technical-notes">
-        {% if coding_condition == 'vibe' %}
-        <h4>Vibe Coding</h4>
-        <p>Developers use <strong>AI</strong> to <strong>generate and modify code based on conversational, high-level descriptions</strong> rather than writing it manually. This approach shifts the developer's role from detailed implementation to <strong>outcome-focused guidance</strong>, with <strong>minimal review of the underlying code</strong>. The term reflects the <strong>intuitive, flow-based nature</strong> of the process where developers "vibe" with the AI assistant rather than engaging in traditional coding practices.</p>
-        {% elif coding_condition == 'ai-assisted' %}
-        <h4>AI-Assisted Coding</h4>
-        <p>Developers use <strong>AI</strong> to <strong>support the software development process</strong> while continuing to write, understand, and manage code manually. AI tools are used for tasks like code completion, code generation, code reviews, and writing tests or documentation. This approach enhances traditional workflows by <strong>automating routine or repetitive tasks</strong>. Developers <strong>critically review and selectively integrate AI-generated suggestions</strong>, using the assistant as a productivity tool.</p>
-        {% endif %}
+       <h4>Development Environment</h4>
+       <p>The Windows study VM you are currently using already comes with all the necessary tools to accomplish the coding task later. Visual Studio Code is available as an IDE, and GitHub Copilot is enabled as an AI coding assistant with different LLMs to choose from. </p>
     </div>
+
+    <p>{{ tutorial.description }}</p>
+    <p>Now please complete the following tutorial steps to get to know your development environment. A tutorial workspace opens automatically in Visual Studio Code. If it doesn't: <a href="/open-vscode-tutorial" class="open-vscode-btn">Open VS Code</a>.</p>
     
-    {% if tutorial %}
-        <div class="tutorial-description">
-            <p>{{ tutorial.description }}</p>
-        </div>
-        
+    {% if tutorial %}        
         {% for step in tutorial.steps %}
         <div class="tutorial-step">
             <h3>{{ loop.index }}. {{ step.title }}</h3>
@@ -130,7 +131,7 @@ h1 {
         {% endfor %}
         
         {% if tutorial.wrapup %}
-        <div class="tutorial-description">
+        <div>
             <p>{{ tutorial.wrapup.message }}</p>
         </div>
         {% endif %}

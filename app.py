@@ -687,6 +687,21 @@ def open_vscode():
     # Redirect back to the task page
     return redirect(url_for('task'))
 
+@app.route('/open-vscode-tutorial')
+def open_vscode_tutorial():
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    
+    # Try to open VS Code with the tutorial branch
+    vscode_success = open_vscode_with_tutorial(participant_id, DEVELOPMENT_MODE)
+    
+    if vscode_success:
+        print(f"VS Code with tutorial branch opened successfully for participant {participant_id} (manual request)")
+    else:
+        print(f"Failed to open VS Code with tutorial branch for participant {participant_id} (manual request)")
+    
+    # Redirect back to the tutorial page
+    return redirect(url_for('tutorial'))
+
 @app.route('/complete-task', methods=['POST'])
 def complete_task():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)

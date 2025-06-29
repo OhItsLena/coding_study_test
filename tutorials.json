@@ -4,19 +4,19 @@
         {
             "id": "vibe",
             "title": "Vibe Coding Tutorial",
-            "description": "This tutorial is intended to familiarize yourself with the provided coding environment. You will later implement a task with vibe coding using the Visual Studio Code IDE and the GitHub Copilot Extension. Here you will learn the most important features by implementing a calculator using Copilot's agent, edit, and ask modes in a vibe coding way, without writing code manually.",
+            "description": "This tutorial is intended to familiarize yourself with the coding environment and how to use GitHub Copilot to assist your development workflow. You will build a simple calculator app while practicing natural language programming with the help of agentic coding.",
             "steps": [
                 {
                 "title": "Scaffold with Copilot Agent",
                 "video": "tutorial_vibe1.gif",
-                "instruction": "Use Copilot Chat (Agent Mode) to generate the base structure of a calculator app.",
+                "instruction": "Use Copilot Chat (Agent Mode) to generate the base structure of a calculator app without writing code yourself.",
                 "example_prompt": "Scaffold the UI for a calculator app using HTML, CSS, and JavaScript. It should have a display and buttons for numbers and basic operations.",
                 "try_it_note": "Copilot will automatically create the necessary files. You should see a basic calculator layout with buttons and a display."
                 },
                 {
                 "title": "Add Functionality with the Agent",
                 "video": "tutorial_vibe2.gif",
-                "instruction": "Use Copilot Agent Mode to add functionality to the calculator.",
+                "instruction": "Use Copilot Agent Mode to add functionality you want to the calculator without checking beforehand where the new code needs to go.",
                 "example_prompt": "Show a press animation for the buttons when I hit the respective keyboard key.",
                 "try_it_note": "Select the calculator file as context and describe the change to the agent.",
                 "note": "Test the functionality in the browser before accepting. Undo the suggestion if you don't like it."
@@ -24,7 +24,7 @@
                 {
                 "title": "Brainstorm Features with Ask Mode",
                 "video": "tutorial_vibe3.gif",
-                "instruction": "Use Ask Mode to explore feature ideas and implement one of them.",
+                "instruction": "Use Ask Mode to explore feature ideas and implement the one that fits the theme of your app.",
                 "example_prompt": "What are some small features I could add to make this calculator more useful?",
                 "try_it_note": "Use Ask Mode on a code section, pick a feature Copilot suggests (like keyboard support), and add it using natural language.",
                 "note": "Don't write the implementation yourself - ask the AI to do it."
@@ -32,7 +32,7 @@
                 {
                 "title": "Change the Design Based on Vibes",
                 "video": "tutorial_vibe4.gif",
-                "instruction": "Use a free browser-based AI tool (like Claude or Gemini) to improve the visual design.",
+                "instruction": "Use a free browser-based AI tool (like ChatGPT) to try different visual designs and see what fits the vibe of your app.",
                 "example_prompt": "I don't like the design of this calculator app. It gives off a bad vibe. Make it old school and retro.",
                 "try_it_note": "Paste your code into a browser-based AI tool, describe the design you want, and bring the result back into your editor.",
                 "note": "You can also use the Copilot Chat to ask for design changes, but free browser-based AI tools are available to you as well."
@@ -40,25 +40,25 @@
                 {
                 "title": "Fix a Bug Using Copilot Agent",
                 "video": "tutorial_vibe5.gif",
-                "instruction": "Simulate a bug and ask Copilot Agent to fix it for you.",
+                "instruction": "Simulate a bug and ask Copilot Agent to fix it for you by describing what you experienced during testing of the app.",
                 "example_prompt": "When I press =, the calculator shows nothing. Can you fix it?",
                 "try_it_note": "Break a feature, describe the issue in a new Chat to Copilot Agent, and let it fix the code for you.",
                 "note": "It's helpful to start a new Chat for very different tasks. Make sure to provide the necessary context for the Agent."
                 }
             ],
             "wrapup": {
-                "message": "You're ready to start the main task. Keep using natural language to describe features, let the AI handle the details, and iterate quickly. Don’t write or debug code manually unless something is clearly broken."
+                "message": "You're ready to start the main task. Keep using natural language to describe features, let the AI handle the details, and iterate quickly. Don’t write or debug code manually unless something is very clearly broken."
             }
         },
         {
             "id": "ai-assisted",
             "title": "AI-Assisted Coding Tutorial",
-            "description": "This tutorial is intended to familiarize yourself with the coding environment and how to use GitHub Copilot to assist your development workflow. You will build a simple calculator app while practicing different AI-assisted techniques such as code completion, inline suggestions, Ask Mode, and online search.",
+            "description": "This tutorial is intended to familiarize yourself with the coding environment and how to use GitHub Copilot to assist your development workflow. You will build a simple calculator app while practicing different AI-assisted techniques such as code completion, inline suggestions and ask mode.",
             "steps": [
                 {
                 "title": "Use Code Completion for a Function",
                 "video": "tutorial_ai1.gif",
-                "instruction": "Use Copilot's inline code completion (ghost text) to implement a function that evaluates simple math expressions.",
+                "instruction": "A template of a simple HTML calculator app is provided. Use Copilot's inline code completion (ghost text) to implement a function that evaluates simple math expressions.",
                 "example_prompt": "// Write a function that takes a string like '2+2' and returns the result",
                 "try_it_note": "Start typing the function. Copilot will suggest completions as ghost text. Press Tab to accept and complete the function."
                 },
@@ -78,15 +78,14 @@
                 },
                 {
                 "title": "Search the Web for Help",
-                "video": "tutorial_ai4.gif",
-                "instruction": "When you're unsure how to implement a feature, use your browser to search for code examples and explanations.",
+                "instruction": "When you're unsure how to implement a feature, use your browser to search for code examples and explanations like you would usually do.",
                 "example_prompt": "Search: 'JavaScript keyboard input site:stackoverflow.com'",
                 "try_it_note": "Find a relevant code snippet or explanation on the web. Adapt and integrate it into your project manually.",
                 "note": "You can also use free browser-based AI tools like ChatGPT or Mistral Le Chat to help you."
                 }
             ],
             "wrapup": {
-                "message": "You're ready to start the main task. Keep using AI tools to support your development, but write, debug, and review the code yourself. Think critically about the suggestions and maintain full control of your implementation."
+                "message": "You're ready to start the main coding task. Keep using AI tools to support your development, but write, debug, and review the code yourself. Think critically about the suggestions and maintain full control of your implementation."
             }
         }
     ]
