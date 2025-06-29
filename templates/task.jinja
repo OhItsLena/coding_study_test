@@ -293,9 +293,12 @@ h1 {
     <div id="subtle-stopwatch" class="subtle-stopwatch">
         <span id="elapsed-time">40:00</span>
     </div>
-    
-    <p>Now please use <strong>{% if coding_condition == 'vibe' %}Vibe Coding{% elif coding_condition == 'ai-assisted' %}AI-Assisted Coding{% else %}{{ coding_condition }}{% endif %}</strong> to implement a <strong>PDF Merger Tool</strong>.</p>
-    
+    {% if stage == 1%}
+    <p>Using the AI coding techniques you just learned your task is now to implement a simple web-based <strong>PDF Merger Tool</strong> for personal use. </p>
+    {% else %}
+    <p>Building on your work from the last stage your task is now to implement <strong>additional features</strong> for your web-based <strong>PDF Merger Tool</strong>.
+    Your code has been restored for you and you can continue working on it.</p>
+    {% endif %}
     <div class="mockup-section">
         <img src="/static/mockup.png" alt="PDF Merger Tool Mockup" class="mockup-image">
     </div>
@@ -309,20 +312,20 @@ h1 {
     <div class="technical-notes">
         <h4>Technical Notes:</h4>
         <ul>
-            <li>Use <strong>pure JavaScript or TypeScript</strong> (no frontend frameworks)</li>
-            <li>You may use <strong>any open-source libraries</strong> (e.g., for PDF processing)</li>
-            <li>The solution must run <strong>entirely client-side</strong> in the browser (no server)</li>
+            <li>Using <strong>pure JavaScript or TypeScript</strong> is sufficient, you don't need to use frontend frameworks (e.g., React) for the tool</li>
+            <li>You may use <strong>any open-source libraries</strong> you want to achieve the desired functionality (e.g., for PDF processing)</li>
+            <li>The solution must run <strong>entirely client-side</strong> in the browser without any server-side code</li>
             <li>You don't need to adhere to the provided <strong>UI mockup</strong></li>
-            <li><strong>Do not use Git manually</strong>, version control is handled automatically</li>
+            <li>The code on the <strong>stage branch</strong> is judged as the final submission, after each requirement the code is committed automatically, you don't need to handle version control yourself</li>
         </ul>
     </div>
 
-    <p>Please remember to use <strong>{% if coding_condition == 'vibe' %}Vibe Coding{% elif coding_condition == 'ai-assisted' %}AI-Assisted Coding{% else %}{{ coding_condition }}{% endif %}</strong> as your development approach!<br>
+    <p>Please remember to use AI in your coding approach like outlined in the tutorial.<br>
     If you're unsure what that means, you can revisit the brief <strong>coding guidelines</strong> below at any time during the task.</p>
 
     {% if coding_condition == 'vibe' %}
     <div class="coding-guidelines">
-        <h4>Vibe Coding Guidelines:</h4>
+        <h4>Coding Guidelines:</h4>
         <ul>
             <li>Use natural language to describe the features, look, and feel you want</li>
             <li>Let the AI handle the implementation details</li>
@@ -334,7 +337,7 @@ h1 {
     </div>
     {% elif coding_condition == 'ai-assisted' %}
     <div class="coding-guidelines">
-        <h4>AI-Assisted Coding Guidelines:</h4>
+        <h4>Coding Guidelines:</h4>
         <ul>
             <li>Write, understand, and manage your own code</li>
             <li>Treat AI as a collaborative assistant to boost your productivity</li>
