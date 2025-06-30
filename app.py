@@ -13,6 +13,7 @@ from services import (
     test_github_connectivity_async, stop_async_github_service, wait_for_async_github_completion,
     save_vscode_workspace_storage, save_vscode_workspace_storage_async,
     start_session_recording, stop_session_recording, is_recording_active,
+    upload_session_recording_to_azure,
     setup_tutorial_branch, open_vscode_with_tutorial, push_tutorial_code,
     get_session_log_history, determine_correct_route
 )
@@ -437,6 +438,14 @@ def goodbye():
             recording_stopped = stop_session_recording()
             if recording_stopped:
                 print(f"✅ Screen recording stopped - participant {participant_id} reached goodbye page")
+                
+                # Upload recording to Azure Blob Storage
+                print(f"Uploading recording to Azure for participant {participant_id}, stage {study_stage}")
+                upload_success = upload_session_recording_to_azure(participant_id, study_stage)
+                if upload_success:
+                    print(f"✅ Recording uploaded to Azure for participant {participant_id}, stage {study_stage}")
+                else:
+                    print(f"❌ Failed to upload recording to Azure for participant {participant_id}, stage {study_stage}")
             else:
                 print(f"❌ Failed to stop screen recording for participant {participant_id} at goodbye page")
         else:
@@ -1018,7 +1027,20 @@ if __name__ == '__main__':
         # Stop any active screen recording
         if is_recording_active():
             print("Stopping active screen recording on app shutdown...")
-            stop_session_recording()
+            recording_stopped = stop_session_recording()
+            
+            # Try to upload recording to Azure on shutdown
+            if recording_stopped:
+                print("Attempting to upload recording to Azure before shutdown...")
+                try:
+                    upload_success = upload_session_recording_to_azure(participant_id, study_stage)
+                    if upload_success:
+                        print("✅ Recording uploaded to Azure before shutdown")
+                    else:
+                        print("❌ Failed to upload recording to Azure before shutdown")
+                except Exception as e:
+                    print(f"⚠️ Error uploading recording to Azure on shutdown: {e}")
+                    
         # Stop async GitHub service
         stop_async_github_service()
     

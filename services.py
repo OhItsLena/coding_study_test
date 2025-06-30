@@ -292,6 +292,11 @@ def stop_session_recording():
     return _study_logger.stop_session_recording()
 
 
+def upload_session_recording_to_azure(participant_id, study_stage):
+    """Upload the current session recording to Azure Blob Storage."""
+    return _study_logger.upload_session_recording_to_azure(participant_id, study_stage)
+
+
 def is_recording_active():
     """Check if a recording is currently active."""
     return _study_logger.is_recording_active()

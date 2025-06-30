@@ -511,7 +511,116 @@ class ScreenRecorder:
             kwargs['preexec_fn'] = os.setsid
         
         return kwargs
-
+    
+    def upload_to_azure_blob(self, file_path: str, blob_container: str = "recordings", 
+                           storage_account: str = "codingstudybackup") -> bool:
+        """
+        Upload a recording file to Azure Blob Storage using azcopy.
+        
+        Args:
+            file_path: Local path to the file to upload
+            blob_container: Azure Blob Storage container name (default: "recordings")
+            storage_account: Azure Storage account name (default: "codingstudybackup")
+            
+        Returns:
+            True if upload was successful, False otherwise
+        """
+        if not file_path or not os.path.exists(file_path):
+            print(f"❌ File not found for Azure upload: {file_path}")
+            return False
+        
+        try:
+            # Get the filename for the blob
+            filename = os.path.basename(file_path)
+            blob_url = f"https://{storage_account}.blob.core.windows.net/{blob_container}/{filename}"
+            
+            print(f"Uploading {filename} to Azure Blob Storage...")
+            
+            # Get subprocess kwargs for cross-platform compatibility
+            kwargs = self._get_recording_subprocess_kwargs()
+            kwargs['timeout'] = 300  # 5 minute timeout for large files
+            
+            # Step 1: Login to Azure using managed identity
+            print("Authenticating with Azure using managed identity...")
+            login_cmd = ['azcopy', 'login', '--identity']
+            
+            login_result = subprocess.run(login_cmd, **kwargs)
+            if login_result.returncode != 0:
+                print(f"❌ Azure login failed: {login_result.stderr}")
+                return False
+            
+            print("✅ Successfully authenticated with Azure")
+            
+            # Step 2: Upload the file
+            print(f"Copying file to blob: {blob_url}")
+            copy_cmd = ['azcopy', 'copy', file_path, blob_url]
+            
+            copy_result = subprocess.run(copy_cmd, **kwargs)
+            if copy_result.returncode != 0:
+                print(f"❌ Azure upload failed: {copy_result.stderr}")
+                return False
+            
+            print(f"✅ Successfully uploaded {filename} to Azure Blob Storage")
+            print(f"   Blob URL: {blob_url}")
+            
+            return True
+            
+        except subprocess.TimeoutExpired:
+            print(f"❌ Azure upload timed out for file: {filename}")
+            return False
+        except FileNotFoundError:
+            print("❌ azcopy command not found. Please install Azure CLI and azcopy.")
+            return False
+        except Exception as e:
+            print(f"❌ Error uploading to Azure Blob Storage: {e}")
+            return False
+    
+    def upload_recording_to_azure(self, participant_id: str, study_stage: int) -> bool:
+        """
+        Upload the current recording file to Azure Blob Storage and optionally remove local file.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            study_stage: The current study stage
+            
+        Returns:
+            True if upload was successful, False otherwise
+        """
+        if not self.recording_file_path:
+            print("❌ No recording file path available for Azure upload")
+            return False
+        
+        # Check if the file exists (it might have been moved by stop_recording)
+        file_to_upload = None
+        if os.path.exists(self.recording_file_path):
+            file_to_upload = self.recording_file_path
+        else:
+            # Try to find the file in default OBS locations
+            if self.recording_start_time:
+                found_file = self._find_latest_recording_file(participant_id, study_stage, self.recording_start_time)
+                if found_file and os.path.exists(found_file):
+                    file_to_upload = found_file
+                    print(f"Found recording file at: {found_file}")
+        
+        if not file_to_upload:
+            print("❌ Recording file not found for Azure upload")
+            return False
+        
+        # Upload to Azure
+        success = self.upload_to_azure_blob(file_to_upload)
+        
+        if success:
+            print(f"✅ Recording for participant {participant_id}, stage {study_stage} uploaded to Azure")
+            # Optionally remove local file after successful upload
+            # Uncomment the following lines if you want to delete local files after upload:
+            # try:
+            #     os.remove(file_to_upload)
+            #     print(f"🗑️  Local recording file removed: {file_to_upload}")
+            # except Exception as e:
+            #     print(f"⚠️  Could not remove local file: {e}")
+        
+        return success
+        
 
 class StudyLogger:
     """
@@ -566,6 +675,20 @@ class StudyLogger:
         """
         return self.screen_recorder.is_recording()
 
+    def upload_session_recording_to_azure(self, participant_id: str, study_stage: int) -> bool:
+        """
+        Upload the current session recording to Azure Blob Storage.
+        This should be called after stopping a recording session.
+        
+        Args:
+            participant_id: The participant's unique identifier
+            study_stage: The current study stage
+            
+        Returns:
+            True if upload was successful, False otherwise
+        """
+        return self.screen_recorder.upload_recording_to_azure(participant_id, study_stage)
+    
     def _get_recording_subprocess_kwargs(self) -> Dict[str, Any]:
         """
         Get subprocess keyword arguments for recording processes.
