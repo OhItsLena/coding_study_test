@@ -35,19 +35,19 @@ class RepositoryManager:
         self._repo_locks = {}
         self._locks_mutex = threading.Lock()
     
-    def _get_repo_lock(self, repo_path: str) -> threading.Lock:
+    def _get_repo_lock(self, repo_path: str) -> threading.RLock:
         """
-        Get or create a lock for a specific repository path.
+        Get or create a reentrant lock for a specific repository path.
         
         Args:
             repo_path: Path to the repository
             
         Returns:
-            Threading lock for the repository
+            Threading reentrant lock for the repository
         """
         with self._locks_mutex:
             if repo_path not in self._repo_locks:
-                self._repo_locks[repo_path] = threading.Lock()
+                self._repo_locks[repo_path] = threading.RLock()
             return self._repo_locks[repo_path]
     
     def _get_subprocess_kwargs(self) -> Dict[str, Any]:
@@ -694,7 +694,7 @@ class RepositoryManager:
                           github_token: str, github_org: str) -> bool:
         """
         Push tutorial code to remote tutorial branch.
-        This is now a simple wrapper around commit_and_backup_all for tutorial completion.
+        Uses the same unified workflow as commit_and_backup_all but ensures we're on tutorial branch.
         Thread-safe with repository-level locking.
         
         Args:
@@ -717,11 +717,21 @@ class RepositoryManager:
             repo_lock = self._get_repo_lock(repo_path)
             
             with repo_lock:
-                # Ensure we're on tutorial branch before committing
                 original_cwd = os.getcwd()
-                os.chdir(repo_path)
                 
                 try:
+                    # Check if it's a valid git repository
+                    git_dir = os.path.join(repo_path, '.git')
+                    if not os.path.exists(git_dir):
+                        logger.info(f"Not a valid git repository: {repo_path}")
+                        return False
+                    
+                    # Ensure git config is set up
+                    self.ensure_git_config(repo_path, participant_id)
+                    
+                    # Change to repository directory
+                    os.chdir(repo_path)
+                    
                     logger.info(f"Pushing tutorial code for {participant_id} (locked)")
                     
                     # Make sure we're on the tutorial branch
@@ -753,19 +763,33 @@ class RepositoryManager:
                         if result.returncode != 0:
                             logger.warning(f"Failed to pull tutorial updates: {result.stderr}")
                     
+                    # Step 1: Commit any changes on the current branch
+                    commit_message = f"Tutorial completion - {participant_id}"
+                    success = self._commit_current_branch_changes(None, commit_message)  # None = tutorial stage
+                    if not success:
+                        logger.info("Failed to commit changes on tutorial branch")
+                        return False
+                    
+                    # Step 2: Push all branches to remote as backup (if we have authentication)
+                    if github_token:
+                        success = self._push_all_branches_backup(participant_id, github_token, github_org)
+                        if not success:
+                            logger.info("Warning: Failed to backup all branches to remote")
+                            # Don't return False here - local commit succeeded
+                    else:
+                        logger.info("No GitHub token provided - changes committed locally only")
+                    
+                    logger.info(f"Successfully completed tutorial push workflow for {participant_id}")
+                    return True
+                    
+                except Exception as e:
+                    logger.info(f"Error in tutorial push workflow: {str(e)}")
+                    return False
                 finally:
-                    os.chdir(original_cwd)
-                
-                # Use the unified commit and backup method with tutorial-specific message
-                commit_message = f"Tutorial completion - {participant_id}"
-                return self.commit_and_backup_all(
-                    participant_id=participant_id,
-                    study_stage=None,  # None indicates tutorial, not a numbered stage
-                    commit_message=commit_message,
-                    development_mode=development_mode,
-                    github_token=github_token,
-                    github_org=github_org
-                )
+                    try:
+                        os.chdir(original_cwd)
+                    except Exception as e:
+                        logger.warning(f"Failed to restore original working directory: {str(e)}")
                 
         except Exception as e:
             logger.info(f"Error pushing tutorial code: {str(e)}")
