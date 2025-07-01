@@ -636,39 +636,6 @@ class StudyLogger:
         """
         self.github_service = github_service
         self.screen_recorder = ScreenRecorder()
-        # Generate unique session ID for this app run
-        self.session_id = self._generate_session_id()
-    
-    def _generate_session_id(self) -> str:
-        """
-        Generate a unique session ID for this app run.
-        
-        Returns:
-            Unique session identifier string
-        """
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        # Add some randomness to handle multiple starts within the same second
-        import random
-        random_suffix = f"{random.randint(1000, 9999)}"
-        return f"{timestamp}_{random_suffix}"
-    
-    def get_logging_branch_name(self) -> str:
-        """
-        Get the unique logging branch name for this app run.
-        
-        Returns:
-            Unique branch name for this session
-        """
-        return f"logging-{self.session_id}"
-    
-    def get_session_log_filename(self) -> str:
-        """
-        Get the session log filename (consistent across all sessions).
-        
-        Returns:
-            Standard session log filename
-        """
-        return "session_log.json"
     
     def start_session_recording(self, participant_id: str, study_stage: int, development_mode: bool) -> bool:
         """
@@ -1020,7 +987,7 @@ class StudyLogger:
                       github_token: Optional[str] = None, github_org: Optional[str] = None) -> bool:
         """
         Log a route visit with timestamp and relevant context.
-        Uses session-specific log file to avoid conflicts with previous runs.
+        Only logs the first visit to each route to track study flow transitions.
         
         Args:
             participant_id: The participant's ID
@@ -1041,8 +1008,7 @@ class StudyLogger:
                 return False
             
             logs_path = self.get_logs_directory_path(participant_id, development_mode)
-            # Use session-specific log file
-            log_file_path = os.path.join(logs_path, self.get_session_log_filename())
+            log_file_path = os.path.join(logs_path, 'session_log.json')
             original_cwd = os.getcwd()
             
             # Switch to logs directory
@@ -1053,26 +1019,21 @@ class StudyLogger:
             kwargs["timeout"] = 5
             subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
             
-            # Load existing logs for this session or create new structure
-            logs_data = {
-                'session_id': self.session_id,
-                'session_start_time': datetime.now().isoformat(),
-                'visits': []
-            }
-            
+            # Load existing logs or create new structure
+            logs_data = {'visits': []}
             if os.path.exists(log_file_path):
                 try:
                     with open(log_file_path, 'r', encoding='utf-8') as f:
                         logs_data = json.load(f)
                 except (json.JSONDecodeError, FileNotFoundError):
-                    print("Could not read existing session log file, creating new one")
+                    print("Could not read existing log file, creating new one")
             
-            # Check if this route has already been visited in this session for this stage
+            # Check if this route has already been visited in this stage
             existing_visits = [visit for visit in logs_data['visits'] 
                              if visit.get('route') == route_name and visit.get('study_stage') == study_stage]
             
             if existing_visits:
-                print(f"Route {route_name} already logged in this session for stage {study_stage}, skipping")
+                print(f"Route {route_name} already logged for stage {study_stage}, skipping")
                 return True
             
             # Create log entry
@@ -1083,8 +1044,7 @@ class StudyLogger:
                 'study_stage': study_stage,
                 'timestamp': timestamp.isoformat(),
                 'timestamp_unix': timestamp.timestamp(),
-                'development_mode': development_mode,
-                'session_id': self.session_id
+                'development_mode': development_mode
             }
             
             # Add session data if provided
@@ -1101,14 +1061,14 @@ class StudyLogger:
             # Commit the log entry
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 5
-            subprocess.run(['git', 'add', self.get_session_log_filename()], **kwargs)
+            subprocess.run(['git', 'add', 'session_log.json'], **kwargs)
             
-            commit_message = f"Log route visit: {route_name} (stage {study_stage}, branch {self.get_logging_branch_name()}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+            commit_message = f"Log route visit: {route_name} (stage {study_stage}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
             kwargs["timeout"] = 10
             result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
             
             if result.returncode == 0:
-                print(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}, branch {self.get_logging_branch_name()}")
+                print(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}")
                 
                 # Push to remote if token is available
                 if github_token and github_org:
@@ -1518,7 +1478,7 @@ class StudyLogger:
 
     def get_session_log_history(self, participant_id: str, development_mode: bool, study_stage: int) -> List[Dict]:
         """
-        Get the session log history for a participant and stage from the current session.
+        Get the session log history for a participant and stage.
         
         Args:
             participant_id: The participant's unique identifier
@@ -1526,11 +1486,11 @@ class StudyLogger:
             study_stage: The study stage to get logs for
         
         Returns:
-            List of route visit entries for the specified stage from current session, sorted by timestamp
+            List of route visit entries for the specified stage, sorted by timestamp
         """
         try:
             logs_path = self.get_logs_directory_path(participant_id, development_mode)
-            log_file_path = os.path.join(logs_path, self.get_session_log_filename())
+            log_file_path = os.path.join(logs_path, 'session_log.json')
             
             if not os.path.exists(log_file_path):
                 return []
@@ -1550,108 +1510,18 @@ class StudyLogger:
         except Exception as e:
             print(f"Error reading session log history: {str(e)}")
             return []
-        
-    def get_all_session_logs(self, participant_id: str, development_mode: bool) -> List[Dict]:
-        """
-        Get all session logs for a participant across all app runs by checking all logging branches.
-        
-        Args:
-            participant_id: The participant's unique identifier
-            development_mode: Whether running in development mode
-        
-        Returns:
-            List of all session log data, sorted by session start time
-        """
-        try:
-            logs_path = self.get_logs_directory_path(participant_id, development_mode)
-            
-            if not os.path.exists(logs_path):
-                return []
-            
-            original_cwd = os.getcwd()
-            all_sessions = []
-            
-            try:
-                os.chdir(logs_path)
-                
-                # Get all branches that start with 'logging-'
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'branch', '-a'], **kwargs)
-                
-                if result.returncode != 0:
-                    print(f"Failed to list git branches: {result.stderr}")
-                    return []
-                
-                # Parse branch names
-                branches = []
-                for line in result.stdout.split('\n'):
-                    line = line.strip()
-                    if 'logging-' in line:
-                        # Remove asterisk and whitespace, handle remote branches
-                        branch_name = line.replace('*', '').strip()
-                        if branch_name.startswith('remotes/origin/'):
-                            branch_name = branch_name.replace('remotes/origin/', '')
-                        if branch_name.startswith('logging-'):
-                            branches.append(branch_name)
-                
-                # Remove duplicates
-                branches = list(set(branches))
-                
-                # Get current branch to restore later
-                current_branch_result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
-                current_branch = current_branch_result.stdout.strip() if current_branch_result.returncode == 0 else None
-                
-                # Check each logging branch for session logs
-                for branch_name in branches:
-                    try:
-                        # Checkout the branch
-                        kwargs = self._get_subprocess_kwargs()
-                        kwargs["timeout"] = 10
-                        result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
-                        
-                        if result.returncode != 0:
-                            print(f"Failed to checkout branch {branch_name}: {result.stderr}")
-                            continue
-                        
-                        # Read session log from this branch
-                        log_file_path = os.path.join(logs_path, 'session_log.json')
-                        if os.path.exists(log_file_path):
-                            with open(log_file_path, 'r', encoding='utf-8') as f:
-                                session_data = json.load(f)
-                                session_data['branch_name'] = branch_name
-                                all_sessions.append(session_data)
-                    
-                    except (json.JSONDecodeError, FileNotFoundError, PermissionError) as e:
-                        print(f"Could not read session log from branch {branch_name}: {e}")
-                        continue
-                
-                # Restore original branch
-                if current_branch:
-                    subprocess.run(['git', 'checkout', current_branch], **kwargs)
-                
-            finally:
-                os.chdir(original_cwd)
-            
-            # Sort by session start time
-            all_sessions.sort(key=lambda x: x.get('session_start_time', ''))
-            
-            return all_sessions
-            
-        except Exception as e:
-            print(f"Error reading all session logs: {str(e)}")
-            return []
+
 
 class SessionTracker:
     """
-    Manages session-based tracking to prevent duplicate logging within a single app run.
+    Manages session-based tracking to prevent duplicate logging.
     """
     
     @staticmethod
     def should_log_route(session: Dict, route_name: str, study_stage: int) -> bool:
         """
-        Check if a route should be logged in the current Flask session.
-        This only tracks routes within the current app run/Flask session.
+        Check if a route should be logged (i.e., if this is the first visit).
+        Uses session data to track which routes have been visited.
         
         Args:
             session: Flask session object
@@ -1659,7 +1529,7 @@ class SessionTracker:
             study_stage: Current study stage
         
         Returns:
-            True if route should be logged, False if already logged in this Flask session
+            True if route should be logged, False if already logged
         """
         session_key = f'logged_routes_stage{study_stage}'
         logged_routes = session.get(session_key, [])
@@ -1670,7 +1540,7 @@ class SessionTracker:
     @staticmethod
     def mark_route_as_logged(session: Dict, route_name: str, study_stage: int) -> None:
         """
-        Mark a route as having been logged in the current Flask session.
+        Mark a route as having been logged in the session.
         
         Args:
             session: Flask session object
