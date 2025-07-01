@@ -650,16 +650,25 @@ class StudyLogger:
         # Add some randomness to handle multiple starts within the same second
         import random
         random_suffix = f"{random.randint(1000, 9999)}"
-        return f"session_{timestamp}_{random_suffix}"
+        return f"{timestamp}_{random_suffix}"
+    
+    def get_logging_branch_name(self) -> str:
+        """
+        Get the unique logging branch name for this app run.
+        
+        Returns:
+            Unique branch name for this session
+        """
+        return f"logging-{self.session_id}"
     
     def get_session_log_filename(self) -> str:
         """
-        Get the session log filename for this app run.
+        Get the session log filename (consistent across all sessions).
         
         Returns:
-            Session-specific log filename
+            Standard session log filename
         """
-        return f"session_log_{self.session_id}.json"
+        return "session_log.json"
     
     def start_session_recording(self, participant_id: str, study_stage: int, development_mode: bool) -> bool:
         """
@@ -902,12 +911,15 @@ class StudyLogger:
     
     def _ensure_logging_branch_with_sync(self) -> bool:
         """
-        Ensure logging branch exists with proper remote synchronization.
+        Ensure unique logging branch exists for this session.
+        Each app run gets its own branch to avoid conflicts.
         
         Returns:
             True if successful, False otherwise
         """
         try:
+            branch_name = self.get_logging_branch_name()
+            
             # First, try to fetch from remote to get latest refs
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 15
@@ -915,86 +927,88 @@ class StudyLogger:
             if result.returncode != 0:
                 print(f"Warning: Failed to fetch from remote (may not exist yet): {result.stderr}")
             
-            # Check if logging branch exists locally
+            # Check if our unique branch exists locally
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 10
-            result = subprocess.run(['git', 'branch', '--list', 'logging'], **kwargs)
-            local_logging_exists = 'logging' in result.stdout
+            result = subprocess.run(['git', 'branch', '--list', branch_name], **kwargs)
+            local_branch_exists = branch_name in result.stdout
             
-            # Check if logging branch exists remotely
+            # Check if our unique branch exists remotely
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 10
-            result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/logging'], **kwargs)
-            remote_logging_exists = 'origin/logging' in result.stdout
+            result = subprocess.run(['git', 'branch', '-r', '--list', f'origin/{branch_name}'], **kwargs)
+            remote_branch_exists = f'origin/{branch_name}' in result.stdout
             
-            if local_logging_exists and remote_logging_exists:
+            if local_branch_exists and remote_branch_exists:
                 # Both exist - checkout local and pull updates
-                print("Logging branch exists both locally and remotely - syncing")
+                print(f"Branch {branch_name} exists both locally and remotely - syncing")
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'checkout', 'logging'], **kwargs)
+                result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to checkout logging branch: {result.stderr}")
+                    print(f"Failed to checkout branch {branch_name}: {result.stderr}")
                     return False
                 
-                # Pull updates with merge strategy for logs (append-only)
+                # Pull updates
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 20
-                result = subprocess.run(['git', 'pull', 'origin', 'logging'], **kwargs)
+                result = subprocess.run(['git', 'pull', 'origin', branch_name], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Warning: Failed to pull logging branch updates: {result.stderr}")
-                    # Try to resolve with merge strategy favoring remote (logs should not conflict)
-                    result = subprocess.run(['git', 'merge', '--abort'], **kwargs)
-                    result = subprocess.run([
-                        'git', 'pull', 'origin', 'logging', '--strategy=recursive', '--strategy-option=theirs'
-                    ], **kwargs)
-                    
-                    if result.returncode != 0:
-                        print(f"Failed to resolve logging branch conflicts: {result.stderr}")
-                        return False
-                    else:
-                        print("Resolved logging branch conflicts favoring remote")
+                    print(f"Warning: Failed to pull branch {branch_name} updates: {result.stderr}")
                 else:
-                    print("Successfully synchronized logging branch with remote")
+                    print(f"Successfully synchronized branch {branch_name} with remote")
                     
-            elif local_logging_exists:
+            elif local_branch_exists:
                 # Only local exists - just switch to it
-                print("Switching to existing local logging branch")
+                print(f"Switching to existing local branch {branch_name}")
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'checkout', 'logging'], **kwargs)
+                result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to checkout logging branch: {result.stderr}")
+                    print(f"Failed to checkout branch {branch_name}: {result.stderr}")
                     return False
                     
-            elif remote_logging_exists:
+            elif remote_branch_exists:
                 # Only remote exists - create local tracking branch
-                print("Creating local logging branch tracking remote origin/logging")
+                print(f"Creating local branch {branch_name} tracking remote origin/{branch_name}")
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 15
                 result = subprocess.run([
-                    'git', 'checkout', '-b', 'logging', 'origin/logging'
+                    'git', 'checkout', '-b', branch_name, f'origin/{branch_name}'
                 ], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to create tracking logging branch: {result.stderr}")
+                    print(f"Failed to create tracking branch {branch_name}: {result.stderr}")
                     return False
                     
             else:
-                # Neither exists - create new logging branch
-                print("Creating new logging branch")
+                # Neither exists - create new branch from main/master
+                print(f"Creating new branch {branch_name}")
+                
+                # First ensure we're on main/master
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'checkout', '-b', 'logging'], **kwargs)
+                result = subprocess.run(['git', 'checkout', 'main'], **kwargs)
+                if result.returncode != 0:
+                    # Try master if main doesn't exist
+                    result = subprocess.run(['git', 'checkout', 'master'], **kwargs)
+                    if result.returncode != 0:
+                        print(f"Failed to checkout main/master branch: {result.stderr}")
+                        return False
+                
+                # Create new branch
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 10
+                result = subprocess.run(['git', 'checkout', '-b', branch_name], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to create logging branch: {result.stderr}")
+                    print(f"Failed to create branch {branch_name}: {result.stderr}")
                     return False
             
-            print("Successfully ensured logging branch is active and synchronized")
+            print(f"Successfully ensured branch {branch_name} is active")
             return True
             
         except Exception as e:
@@ -1034,10 +1048,10 @@ class StudyLogger:
             # Switch to logs directory
             os.chdir(logs_path)
             
-            # Ensure we're on logging branch
+            # Ensure we're on our unique logging branch
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 5
-            subprocess.run(['git', 'checkout', 'logging'], **kwargs)
+            subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
             
             # Load existing logs for this session or create new structure
             logs_data = {
@@ -1089,12 +1103,12 @@ class StudyLogger:
             kwargs["timeout"] = 5
             subprocess.run(['git', 'add', self.get_session_log_filename()], **kwargs)
             
-            commit_message = f"Log route visit: {route_name} (stage {study_stage}, session {self.session_id}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+            commit_message = f"Log route visit: {route_name} (stage {study_stage}, branch {self.get_logging_branch_name()}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
             kwargs["timeout"] = 10
             result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
             
             if result.returncode == 0:
-                print(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}, session {self.session_id}")
+                print(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}, branch {self.get_logging_branch_name()}")
                 
                 # Push to remote if token is available
                 if github_token and github_org:
@@ -1180,10 +1194,11 @@ class StudyLogger:
                 if result.returncode != 0:
                     print(f"Warning: Failed to set authenticated remote URL: {result.stderr}")
                 
-                # Attempt to push logging branch
+                # Attempt to push our unique logging branch
+                branch_name = self.get_logging_branch_name()
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 30
-                result = subprocess.run(['git', 'push', 'origin', 'logging'], **kwargs)
+                result = subprocess.run(['git', 'push', 'origin', branch_name], **kwargs)
                 
                 if result.returncode == 0:
                     print(f"Successfully pushed logs to remote for participant {participant_id}")
@@ -1220,12 +1235,14 @@ class StudyLogger:
     def _sync_logging_with_remote(self) -> bool:
         """
         Sync local logging branch with remote logging branch.
-        Uses append-only strategy for logs.
+        Uses unique branch names so conflicts should be rare.
         
         Returns:
             True if successful, False otherwise
         """
         try:
+            branch_name = self.get_logging_branch_name()
+            
             # Fetch latest changes
             kwargs = self._get_subprocess_kwargs()
             kwargs['timeout'] = 15
@@ -1235,41 +1252,17 @@ class StudyLogger:
                 print(f"Failed to fetch from remote: {result.stderr}")
                 return False
             
-            # Try to pull and merge with strategy favoring both sides (logs are append-only)
+            # Try to pull and merge
             kwargs = self._get_subprocess_kwargs()
             kwargs['timeout'] = 20
-            result = subprocess.run(['git', 'pull', 'origin', 'logging'], **kwargs)
+            result = subprocess.run(['git', 'pull', 'origin', branch_name], **kwargs)
             
             if result.returncode == 0:
-                print("Successfully merged remote logging changes")
+                print(f"Successfully merged remote changes for branch {branch_name}")
                 return True
             else:
-                # If automatic merge fails, try to resolve with merge strategy
-                print(f"Automatic logging merge failed, trying merge strategy: {result.stderr}")
-                
-                # Reset to try a different approach
-                result = subprocess.run(['git', 'merge', '--abort'], **kwargs)
-                
-                # For logs, we want to merge both sides since logs should be append-only
-                # Use recursive merge with patience strategy for better merging
-                result = subprocess.run([
-                    'git', 'pull', 'origin', 'logging', '--strategy=recursive', '--strategy-option=patience'
-                ], **kwargs)
-                
-                if result.returncode == 0:
-                    print("Successfully resolved logging merge conflicts")
-                    return True
-                else:
-                    print(f"Failed to resolve logging merge conflicts: {result.stderr}")
-                    # As a last resort, try to rebase our changes on top of remote
-                    result = subprocess.run(['git', 'pull', '--rebase', 'origin', 'logging'], **kwargs)
-                    
-                    if result.returncode == 0:
-                        print("Successfully rebased logging changes on remote")
-                        return True
-                    else:
-                        print(f"Failed to rebase logging changes: {result.stderr}")
-                        return False
+                print(f"Failed to merge remote changes for branch {branch_name}: {result.stderr}")
+                return False
                     
         except Exception as e:
             print(f"Error syncing logging with remote: {str(e)}")
@@ -1306,10 +1299,10 @@ class StudyLogger:
             # Switch to logs directory
             os.chdir(logs_path)
             
-            # Ensure we're on logging branch
+            # Ensure we're on our unique logging branch
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 5
-            subprocess.run(['git', 'checkout', 'logging'], **kwargs)
+            subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
             
             # Load existing transitions or create new structure
             transitions_data = {'transitions': []}
@@ -1467,10 +1460,10 @@ class StudyLogger:
             # Switch to logs directory
             os.chdir(logs_path)
             
-            # Ensure we're on logging branch
+            # Ensure we're on our unique logging branch
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 5
-            subprocess.run(['git', 'checkout', 'logging'], **kwargs)
+            subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
             
             # Create vscode-storage directory if it doesn't exist
             vscode_logs_dir = os.path.join(logs_path, 'vscode-storage')
@@ -1560,7 +1553,7 @@ class StudyLogger:
         
     def get_all_session_logs(self, participant_id: str, development_mode: bool) -> List[Dict]:
         """
-        Get all session logs for a participant across all app runs.
+        Get all session logs for a participant across all app runs by checking all logging branches.
         
         Args:
             participant_id: The participant's unique identifier
@@ -1575,21 +1568,70 @@ class StudyLogger:
             if not os.path.exists(logs_path):
                 return []
             
+            original_cwd = os.getcwd()
             all_sessions = []
             
-            # Find all session log files
-            for filename in os.listdir(logs_path):
-                if filename.startswith('session_log_') and filename.endswith('.json'):
-                    log_file_path = os.path.join(logs_path, filename)
-                    
+            try:
+                os.chdir(logs_path)
+                
+                # Get all branches that start with 'logging-'
+                kwargs = self._get_subprocess_kwargs()
+                kwargs["timeout"] = 10
+                result = subprocess.run(['git', 'branch', '-a'], **kwargs)
+                
+                if result.returncode != 0:
+                    print(f"Failed to list git branches: {result.stderr}")
+                    return []
+                
+                # Parse branch names
+                branches = []
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if 'logging-' in line:
+                        # Remove asterisk and whitespace, handle remote branches
+                        branch_name = line.replace('*', '').strip()
+                        if branch_name.startswith('remotes/origin/'):
+                            branch_name = branch_name.replace('remotes/origin/', '')
+                        if branch_name.startswith('logging-'):
+                            branches.append(branch_name)
+                
+                # Remove duplicates
+                branches = list(set(branches))
+                
+                # Get current branch to restore later
+                current_branch_result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
+                current_branch = current_branch_result.stdout.strip() if current_branch_result.returncode == 0 else None
+                
+                # Check each logging branch for session logs
+                for branch_name in branches:
                     try:
-                        with open(log_file_path, 'r', encoding='utf-8') as f:
-                            session_data = json.load(f)
-                            session_data['filename'] = filename
-                            all_sessions.append(session_data)
-                    except (json.JSONDecodeError, FileNotFoundError, PermissionError):
-                        print(f"Could not read session log file: {filename}")
+                        # Checkout the branch
+                        kwargs = self._get_subprocess_kwargs()
+                        kwargs["timeout"] = 10
+                        result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
+                        
+                        if result.returncode != 0:
+                            print(f"Failed to checkout branch {branch_name}: {result.stderr}")
+                            continue
+                        
+                        # Read session log from this branch
+                        log_file_path = os.path.join(logs_path, 'session_log.json')
+                        if os.path.exists(log_file_path):
+                            with open(log_file_path, 'r', encoding='utf-8') as f:
+                                session_data = json.load(f)
+                                session_data['branch_name'] = branch_name
+                                all_sessions.append(session_data)
+                    
+                    except (json.JSONDecodeError, FileNotFoundError, PermissionError) as e:
+                        print(f"Could not read session log from branch {branch_name}: {e}")
                         continue
+                
+                # Restore original branch
+                if current_branch:
+                    subprocess.run(['git', 'checkout', current_branch], **kwargs)
+                
+            finally:
+                os.chdir(original_cwd)
             
             # Sort by session start time
             all_sessions.sort(key=lambda x: x.get('session_start_time', ''))
