@@ -343,6 +343,14 @@ def background_questionnaire():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     
+    # Stage 2 participants should skip the background questionnaire
+    if study_stage == 2:
+        return redirect(url_for('welcome_back'))
+    
+    # Check if consent has been given for stage 1 participants
+    if study_stage == 1 and not session.get('consent_given'):
+        return redirect(url_for('consent_form'))
+    
     # Check for automatic rerouting based on session history
     reroute = check_automatic_rerouting('background_questionnaire', participant_id, study_stage, DEVELOPMENT_MODE)
     if reroute:
@@ -365,14 +373,6 @@ def background_questionnaire():
             github_org=GITHUB_ORG
         )
         mark_route_as_logged(session, 'background_questionnaire', study_stage)
-    
-    # Stage 2 participants should skip the background questionnaire
-    if study_stage == 2:
-        return redirect(url_for('welcome_back'))
-    
-    # Check if consent has been given for stage 1 participants
-    if study_stage == 1 and not session.get('consent_given'):
-        return redirect(url_for('consent_form'))
     
     survey_url = os.getenv('SURVEY_URL', '#')
     
