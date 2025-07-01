@@ -1,6 +1,8 @@
 import os
 import time
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from dotenv import load_dotenv
 from services import (
@@ -24,11 +26,62 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 
+# Configure logging
+def setup_logging(development_mode=False):
+    """Set up logging configuration with file output."""
+    # Create logs directory if it doesn't exist
+    logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+    
+    # Configure logging level based on mode
+    log_level = logging.DEBUG if development_mode else logging.INFO
+    
+    # Create log filename with timestamp
+    timestamp = time.strftime('%Y%m%d_%H%M%S')
+    log_filename = f'app_{timestamp}.log'
+    log_filepath = os.path.join(logs_dir, log_filename)
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
+    )
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    
+    # Remove existing handlers to avoid duplication
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # File handler with rotation
+    file_handler = RotatingFileHandler(
+        log_filepath, 
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5
+    )
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
+    
+    # Console handler for development mode
+    if development_mode:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(log_level)
+        console_handler.setFormatter(formatter)
+        root_logger.addHandler(console_handler)
+    
+    return log_filepath
+
 # Development mode configuration
 DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'false').lower() == 'true'
 DEV_PARTICIPANT_ID = os.getenv('DEV_PARTICIPANT_ID', 'dev-participant-001')
 DEV_STAGE = int(os.getenv('DEV_STAGE', '1'))
 DEV_CODING_CONDITION = os.getenv('DEV_CODING_CONDITION', 'vibe')
+
+# Set up logging early
+LOG_FILEPATH = setup_logging(DEVELOPMENT_MODE)
+logger = logging.getLogger(__name__)
 
 # GitHub authentication configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
@@ -61,7 +114,7 @@ def check_automatic_rerouting(current_route, participant_id, study_stage, develo
         correct_route = determine_correct_route(participant_id, development_mode, study_stage, current_route)
         
         if correct_route and correct_route != current_route:
-            print(f"Automatic rerouting: {current_route} -> {correct_route} for participant {participant_id}, stage {study_stage}")
+            logger.info(f"Automatic rerouting: {current_route} -> {correct_route} for participant {participant_id}, stage {study_stage}")
             
             # Map route names to URL endpoints
             route_mapping = {
@@ -81,7 +134,7 @@ def check_automatic_rerouting(current_route, participant_id, study_stage, develo
         return None
         
     except Exception as e:
-        print(f"Error in automatic rerouting: {str(e)}")
+        logger.error(f"Error in automatic rerouting: {str(e)}")
         return None
 
 @app.route('/')
@@ -228,7 +281,7 @@ def consent_form():
         with open(os.path.join(os.path.dirname(__file__), 'exportInformedConsent.json'), 'r') as f:
             consent_data = json.load(f)
     except FileNotFoundError:
-        print("Warning: exportInformedConsent.json not found")
+        logger.warning("exportInformedConsent.json not found")
         consent_data = {}
     
     # Log route visit if this is the first time
@@ -297,7 +350,7 @@ def background_questionnaire():
     
     # Check and clone repository when user starts the session (first time accessing this route)
     if should_log_route(session, 'background_questionnaire', study_stage):
-        print(f"\nUser started session - checking and cloning repository for participant: {participant_id}")
+        logger.info(f"User started session - checking and cloning repository for participant: {participant_id}")
         check_and_clone_repository(participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     
     # Log route visit if this is the first time
@@ -368,18 +421,18 @@ def ux_questionnaire():
     commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     
     if commit_success:
-        print(f"Final code changes committed before UX survey for participant {participant_id}")
+        logger.info(f"Final code changes committed before UX survey for participant {participant_id}")
     else:
-        print(f"No changes to commit or commit failed before UX survey for participant {participant_id}")
+        logger.warning(f"No changes to commit or commit failed before UX survey for participant {participant_id}")
     
     # Save VS Code workspace storage at the end of the coding session
-    print(f"Saving VS Code workspace storage for participant {participant_id}, stage {study_stage}")
+    logger.info(f"Saving VS Code workspace storage for participant {participant_id}, stage {study_stage}")
     if ASYNC_GITHUB_MODE:
         # Use async mode for background processing
         save_vscode_workspace_storage_async(
             participant_id, study_stage, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG
         )
-        print(f"VS Code workspace storage save queued for background processing for participant {participant_id}")
+        logger.info(f"VS Code workspace storage save queued for background processing for participant {participant_id}")
     else:
         # Use synchronous mode
         vscode_storage_success = save_vscode_workspace_storage(
@@ -387,9 +440,9 @@ def ux_questionnaire():
         )
         
         if vscode_storage_success:
-            print(f"VS Code workspace storage successfully saved for participant {participant_id}")
+            logger.info(f"VS Code workspace storage successfully saved for participant {participant_id}")
         else:
-            print(f"Failed to save VS Code workspace storage for participant {participant_id}")
+            logger.error(f"Failed to save VS Code workspace storage for participant {participant_id}")
     
     if ux_survey_url == '#':
         return render_template('survey_error.jinja', 
@@ -437,19 +490,19 @@ def goodbye():
         if is_recording_active():
             recording_stopped = stop_session_recording()
             if recording_stopped:
-                print(f"✅ Screen recording stopped - participant {participant_id} reached goodbye page")
+                logger.info(f"Screen recording stopped - participant {participant_id} reached goodbye page")
                 
                 # Upload recording to Azure Blob Storage
-                print(f"Uploading recording to Azure for participant {participant_id}, stage {study_stage}")
+                logger.info(f"Uploading recording to Azure for participant {participant_id}, stage {study_stage}")
                 upload_success = upload_session_recording_to_azure(participant_id, study_stage)
                 if upload_success:
-                    print(f"✅ Recording uploaded to Azure for participant {participant_id}, stage {study_stage}")
+                    logger.info(f"Recording uploaded to Azure for participant {participant_id}, stage {study_stage}")
                 else:
-                    print(f"❌ Failed to upload recording to Azure for participant {participant_id}, stage {study_stage}")
+                    logger.error(f"Failed to upload recording to Azure for participant {participant_id}, stage {study_stage}")
             else:
-                print(f"❌ Failed to stop screen recording for participant {participant_id} at goodbye page")
+                logger.error(f"Failed to stop screen recording for participant {participant_id} at goodbye page")
         else:
-            print(f"ℹ️ No active screen recording to stop for participant {participant_id} at goodbye page")
+            logger.info(f"No active screen recording to stop for participant {participant_id} at goodbye page")
     
     return render_template('goodbye.jinja', 
                          participant_id=participant_id,
@@ -487,18 +540,18 @@ def tutorial():
         mark_route_as_logged(session, 'tutorial', study_stage)
         
         # Set up tutorial branch and open VS Code (only on first visit)
-        print(f"Setting up tutorial branch for {participant_id}")
+        logger.info(f"Setting up tutorial branch for {participant_id}")
         tutorial_setup_success = setup_tutorial_branch(
             participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG
         )
         
         if tutorial_setup_success:
-            print(f"Opening VS Code with tutorial for {participant_id}")
+            logger.info(f"Opening VS Code with tutorial for {participant_id}")
             vscode_success = open_vscode_with_tutorial(participant_id, DEVELOPMENT_MODE)
             if not vscode_success:
-                print(f"Failed to open VS Code with tutorial for {participant_id}")
+                logger.error(f"Failed to open VS Code with tutorial for {participant_id}")
         else:
-            print(f"Failed to set up tutorial branch for {participant_id}")
+            logger.error(f"Failed to set up tutorial branch for {participant_id}")
     
     # Stage 2 participants should skip the tutorial
     if study_stage == 2:
@@ -527,7 +580,7 @@ def welcome_back():
     
     # Check and clone repository when stage 2 user starts (first time accessing this route)
     if should_log_route(session, 'welcome_back', study_stage):
-        print(f"\nStage 2 user started session - checking and cloning repository for participant: {participant_id}")
+        logger.info(f"Stage 2 user started session - checking and cloning repository for participant: {participant_id}")
         check_and_clone_repository(participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     
     # Log route visit if this is the first time
@@ -583,7 +636,7 @@ def task():
     # Set up repository for the current stage (ensure correct branch)
     setup_success = setup_repository_for_stage(participant_id, study_stage, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     if not setup_success:
-        print(f"Warning: Failed to set up repository for stage {study_stage}")
+        logger.warning(f"Failed to set up repository for stage {study_stage}")
     
     # Get stage-specific session data
     session_data = get_session_data(session, study_stage)
@@ -616,7 +669,7 @@ def task():
         
         # Push tutorial code when transitioning from tutorial to task (only for stage 1)
         if study_stage == 1:
-            print(f"Pushing tutorial code for {participant_id} before starting coding task")
+            logger.info(f"Pushing tutorial code for {participant_id} before starting coding task")
             push_tutorial_code(
                 participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, 
                 async_mode=ASYNC_GITHUB_MODE
@@ -628,16 +681,16 @@ def task():
         update_session_data(session, study_stage, timer_start=timer_start)
         
         # Recording already started at server startup, no need to start again
-        print(f"Coding session timer started for participant {participant_id}, stage {study_stage}")
+        logger.info(f"Coding session timer started for participant {participant_id}, stage {study_stage}")
         
         # Make an initial commit to mark the start of this coding session
         commit_message = f"Started coding session - Condition: {coding_condition}"
         commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, async_mode=ASYNC_GITHUB_MODE)
         
         if commit_success:
-            print(f"Initial commit {'queued' if ASYNC_GITHUB_MODE else 'made'} for session start - participant {participant_id}, stage {study_stage}")
+            logger.info(f"Initial commit {'queued' if ASYNC_GITHUB_MODE else 'made'} for session start - participant {participant_id}, stage {study_stage}")
         else:
-            print(f"No initial commit needed or failed for participant {participant_id}, stage {study_stage}")
+            logger.warning(f"No initial commit needed or failed for participant {participant_id}, stage {study_stage}")
     
     # Calculate elapsed time and remaining time
     elapsed_time = time.time() - timer_start
@@ -658,15 +711,15 @@ def task():
         # Try to open VS Code with the repository
         vscode_success = open_vscode_with_repository(participant_id, DEVELOPMENT_MODE, study_stage)
         if vscode_success:
-            print(f"VS Code opened successfully for participant {participant_id}, stage {study_stage}")
+            logger.info(f"VS Code opened successfully for participant {participant_id}, stage {study_stage}")
         else:
-            print(f"Failed to open VS Code for participant {participant_id}, stage {study_stage}")
+            logger.error(f"Failed to open VS Code for participant {participant_id}, stage {study_stage}")
     
     # Debug logging
-    print(f"Task route - Participant: {participant_id}, Stage: {study_stage}")
-    print(f"Current task: {current_task}, Completed tasks: {completed_tasks}")
-    print(f"Total tasks available: {len(task_requirements)}")
-    print(f"Timer - Elapsed: {elapsed_time:.1f}s, Remaining: {remaining_time:.1f}s")
+    logger.debug(f"Task route - Participant: {participant_id}, Stage: {study_stage}")
+    logger.debug(f"Current task: {current_task}, Completed tasks: {completed_tasks}")
+    logger.debug(f"Total tasks available: {len(task_requirements)}")
+    logger.debug(f"Timer - Elapsed: {elapsed_time:.1f}s, Remaining: {remaining_time:.1f}s")
     
     return render_template('task.jinja', 
                          participant_id=participant_id,
@@ -689,9 +742,9 @@ def open_vscode():
     vscode_success = open_vscode_with_repository(participant_id, DEVELOPMENT_MODE, study_stage)
     
     if vscode_success:
-        print(f"VS Code opened successfully for participant {participant_id} (manual request)")
+        logger.info(f"VS Code opened successfully for participant {participant_id} (manual request)")
     else:
-        print(f"Failed to open VS Code for participant {participant_id} (manual request)")
+        logger.error(f"Failed to open VS Code for participant {participant_id} (manual request)")
     
     # Redirect back to the task page
     return redirect(url_for('task'))
@@ -704,9 +757,9 @@ def open_vscode_tutorial():
     vscode_success = open_vscode_with_tutorial(participant_id, DEVELOPMENT_MODE)
     
     if vscode_success:
-        print(f"VS Code with tutorial branch opened successfully for participant {participant_id} (manual request)")
+        logger.info(f"VS Code with tutorial branch opened successfully for participant {participant_id} (manual request)")
     else:
-        print(f"Failed to open VS Code with tutorial branch for participant {participant_id} (manual request)")
+        logger.error(f"Failed to open VS Code with tutorial branch for participant {participant_id} (manual request)")
     
     # Redirect back to the tutorial page
     return redirect(url_for('tutorial'))
@@ -726,14 +779,14 @@ def complete_task():
     task_requirements = get_tasks_for_stage(study_stage, TASK_REQUIREMENTS)
     
     # Debug logging
-    print(f"Complete task - Participant: {participant_id}, Stage: {study_stage}")
-    print(f"Completing task {task_id}, Previously completed: {completed_tasks}")
-    print(f"Timer finished: {timer_finished}")
+    logger.debug(f"Complete task - Participant: {participant_id}, Stage: {study_stage}")
+    logger.debug(f"Completing task {task_id}, Previously completed: {completed_tasks}")
+    logger.debug(f"Timer finished: {timer_finished}")
     
     if task_id not in completed_tasks:
         completed_tasks.append(task_id)
         update_session_data(session, study_stage, completed_tasks=completed_tasks)
-        print(f"Task {task_id} marked as completed for stage {study_stage}")
+        logger.info(f"Task {task_id} marked as completed for stage {study_stage}")
         
         # Log task completion event
         task_title = "Unknown Task"
@@ -765,17 +818,17 @@ def complete_task():
         commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, async_mode=ASYNC_GITHUB_MODE)
         
         if commit_success:
-            print(f"Code changes committed for task {task_id}")
+            logger.info(f"Code changes committed for task {task_id}")
         else:
-            print(f"Failed to commit code changes for task {task_id}")
+            logger.warning(f"Failed to commit code changes for task {task_id}")
     
     # Only move to next task if timer hasn't finished
     if not timer_finished and task_id < len(task_requirements):
         next_task = task_id + 1
         update_session_data(session, study_stage, current_task=next_task)
-        print(f"Moving to next task: {next_task}")
+        logger.info(f"Moving to next task: {next_task}")
     else:
-        print(f"Timer finished or all tasks completed for stage {study_stage}")
+        logger.info(f"Timer finished or all tasks completed for stage {study_stage}")
     
     return redirect(url_for('task'))
 
@@ -812,9 +865,9 @@ def timer_expired():
     commit_success = commit_code_changes(participant_id, study_stage, commit_message, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG)
     
     if commit_success:
-        print(f"Code changes committed when timer expired for participant {participant_id}")
+        logger.info(f"Code changes committed when timer expired for participant {participant_id}")
     else:
-        print(f"No changes to commit or commit failed when timer expired for participant {participant_id}")
+        logger.warning(f"No changes to commit or commit failed when timer expired for participant {participant_id}")
     
     return jsonify({'status': 'success'})
 
@@ -978,74 +1031,75 @@ def debug_routing():
 if __name__ == '__main__':
     # Print mode information
     if DEVELOPMENT_MODE:
-        print("=" * 50)
-        print("RUNNING IN DEVELOPMENT MODE")
-        print(f"Participant ID: {DEV_PARTICIPANT_ID}")
-        print("Repository will be cloned to current directory")
-        print("=" * 50)
+        logger.info("=" * 50)
+        logger.info("RUNNING IN DEVELOPMENT MODE")
+        logger.info(f"Participant ID: {DEV_PARTICIPANT_ID}")
+        logger.info("Repository will be cloned to current directory")
+        logger.info("=" * 50)
     else:
-        print("Running in production mode")
+        logger.info("Running in production mode")
     
     # Get participant ID for startup information (repository cloned when session starts)
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
-    print(f"Starting server for participant: {participant_id}")
-    print(f"Study stage: {study_stage} ({'Stage 1 - First time' if study_stage == 1 else 'Stage 2 - Returning participant'})")
-    print("Note: Repository will be cloned when user clicks 'Start Session'")
+    logger.info(f"Starting server for participant: {participant_id}")
+    logger.info(f"Study stage: {study_stage} ({'Stage 1 - First time' if study_stage == 1 else 'Stage 2 - Returning participant'})")
+    logger.info("Note: Repository will be cloned when user clicks 'Start Session'")
     
     # Test GitHub connectivity
-    print("\nTesting GitHub connectivity...")
-    print(f"Async GitHub mode: {'Enabled' if ASYNC_GITHUB_MODE else 'Disabled'}")
+    logger.info("Testing GitHub connectivity...")
+    logger.info(f"Async GitHub mode: {'Enabled' if ASYNC_GITHUB_MODE else 'Disabled'}")
     if GITHUB_TOKEN:
-        print(f"GitHub authentication enabled for organization: {GITHUB_ORG}")
+        logger.info(f"GitHub authentication enabled for organization: {GITHUB_ORG}")
     else:
-        print("No GitHub token provided - using public access only")
+        logger.warning("No GitHub token provided - using public access only")
     
     if ASYNC_GITHUB_MODE:
         # Test connectivity asynchronously
         test_github_connectivity_async(participant_id, GITHUB_TOKEN, GITHUB_ORG)
-        print("GitHub connectivity test queued for background processing")
+        logger.info("GitHub connectivity test queued for background processing")
     else:
         # Test connectivity synchronously
         github_available = test_github_connectivity(participant_id, GITHUB_TOKEN, GITHUB_ORG)
         if not github_available:
-            print("Warning: GitHub repository may not be accessible")
+            logger.warning("GitHub repository may not be accessible")
     
     # Repository will be cloned when user starts the session
-    print("\nRepository will be cloned when user clicks 'Start Session'")
+    logger.info("Repository will be cloned when user clicks 'Start Session'")
     
     # Start screen recording when server starts to capture the entire participant session
-    print("\nStarting screen recording at server startup...")
+    logger.info("Starting screen recording at server startup...")
     recording_started = start_session_recording(participant_id, study_stage, DEVELOPMENT_MODE)
     if recording_started:
-        print(f"✅ Screen recording started for participant {participant_id}, stage {study_stage}")
+        logger.info(f"Screen recording started for participant {participant_id}, stage {study_stage}")
     else:
-        print(f"❌ Failed to start screen recording for participant {participant_id}, stage {study_stage}")
+        logger.error(f"Failed to start screen recording for participant {participant_id}, stage {study_stage}")
     
     # Set up graceful shutdown for async service and screen recording
     def cleanup_on_exit():
         # Stop any active screen recording
         if is_recording_active():
-            print("Stopping active screen recording on app shutdown...")
+            logger.info("Stopping active screen recording on app shutdown...")
             recording_stopped = stop_session_recording()
             
             # Try to upload recording to Azure on shutdown
             if recording_stopped:
-                print("Attempting to upload recording to Azure before shutdown...")
+                logger.info("Attempting to upload recording to Azure before shutdown...")
                 try:
                     upload_success = upload_session_recording_to_azure(participant_id, study_stage)
                     if upload_success:
-                        print("✅ Recording uploaded to Azure before shutdown")
+                        logger.info("Recording uploaded to Azure before shutdown")
                     else:
-                        print("❌ Failed to upload recording to Azure before shutdown")
+                        logger.error("Failed to upload recording to Azure before shutdown")
                 except Exception as e:
-                    print(f"⚠️ Error uploading recording to Azure on shutdown: {e}")
+                    logger.error(f"Error uploading recording to Azure on shutdown: {e}")
                     
         # Stop async GitHub service
         stop_async_github_service()
     
     import atexit
     atexit.register(cleanup_on_exit)
-    print("Async GitHub service and screen recording shutdown handlers registered")
+    logger.info("Async GitHub service and screen recording shutdown handlers registered")
+    logger.info(f"Logging configured - writing to: {LOG_FILEPATH}")
 
     app.run(debug=DEVELOPMENT_MODE, host='127.0.0.1', port=39765)

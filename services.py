@@ -3,6 +3,7 @@ Service facade for the coding study Flask application.
 This module provides a simplified interface to the new object-oriented models.
 """
 
+import logging
 from models.task_manager import TaskManager, SessionManager
 from models.participant_manager import ParticipantManager
 from models.azure_service import AzureMetadataService
@@ -10,6 +11,9 @@ from models.github_service import GitHubService
 from models.repository_manager import RepositoryManager, VSCodeManager
 from models.study_logger import StudyLogger, SessionTracker
 from models.async_github_service import AsyncGitHubService
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 # Initialize services and managers
 _task_manager = TaskManager()
@@ -22,7 +26,7 @@ _study_logger = StudyLogger(_github_service)
 _session_tracker = SessionTracker()
 
 # Initialize async GitHub service
-_async_github_service = AsyncGitHubService(_github_service, _study_logger)
+_async_github_service = AsyncGitHubService(_github_service, _study_logger, _repository_manager)
 
 
 # Task Management Functions
@@ -42,7 +46,7 @@ def load_tutorials():
             tutorials_data = json.load(f)
         return tutorials_data.get('tutorials', [])
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"Error loading tutorials: {e}")
+        logger.error(f"Error loading tutorials: {e}")
         return []
 
 
@@ -419,5 +423,5 @@ def determine_correct_route(participant_id, development_mode, study_stage, curre
         return None
         
     except Exception as e:
-        print(f"Error determining correct route: {str(e)}")
+        logger.error(f"Error determining correct route: {str(e)}")
         return None

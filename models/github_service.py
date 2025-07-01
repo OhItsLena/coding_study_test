@@ -4,7 +4,11 @@ Handles GitHub connectivity, authentication, and repository operations.
 """
 
 import requests
+import logging
 from typing import Optional
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 class GitHubService:
@@ -59,16 +63,16 @@ class GitHubService:
                 )
                 
                 if response.status_code == 200:
-                    print(f"✓ GitHub repository {repo_name} is accessible with authentication")
+                    logger.info(f"✓ GitHub repository {repo_name} is accessible with authentication")
                     return True
                 elif response.status_code == 404:
-                    print(f"✗ Repository {repo_name} not found or not accessible")
+                    logger.info(f"✗ Repository {repo_name} not found or not accessible")
                     return False
                 elif response.status_code == 401:
-                    print(f"✗ GitHub authentication failed - check your token")
+                    logger.info(f"✗ GitHub authentication failed - check your token")
                     return False
                 else:
-                    print(f"✗ GitHub API returned status code: {response.status_code}")
+                    logger.info(f"✗ GitHub API returned status code: {response.status_code}")
                     return False
             else:
                 # Test public access without authentication
@@ -78,15 +82,15 @@ class GitHubService:
                 )
                 
                 if response.status_code == 200:
-                    print(f"✓ Public repository {repo_name} is accessible")
+                    logger.info(f"✓ Public repository {repo_name} is accessible")
                     return True
                 else:
-                    print(f"✗ Repository {repo_name} not publicly accessible (status: {response.status_code})")
+                    logger.info(f"✗ Repository {repo_name} not publicly accessible (status: {response.status_code})")
                     return False
                     
         except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to connect to GitHub API: {str(e)}")
+            logger.info(f"✗ Failed to connect to GitHub API: {str(e)}")
             return False
         except Exception as e:
-            print(f"✗ Error testing GitHub connectivity: {str(e)}")
+            logger.info(f"✗ Error testing GitHub connectivity: {str(e)}")
             return False

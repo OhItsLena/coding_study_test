@@ -6,7 +6,11 @@ Handles task requirements, session data, and task progression.
 import os
 import json
 import time
+import logging
 from typing import Dict, List, Any, Optional
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 class TaskManager:
@@ -51,7 +55,7 @@ class TaskManager:
                 data = json.load(file)
                 return data
         except Exception as e:
-            print(f"Error loading task requirements: {str(e)}")
+            logger.error(f"Error loading task requirements: {str(e)}")
             return {"stage1_tasks": [], "stage2_tasks": []}
     
     def get_tasks_for_stage(self, study_stage: int) -> List[Dict]:

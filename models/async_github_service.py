@@ -7,11 +7,14 @@ import threading
 import queue
 import time
 import json
+import logging
 from typing import Optional, Dict, Any, Callable
 from datetime import datetime
 from .github_service import GitHubService
 from .study_logger import StudyLogger
-import services
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 class GitHubOperation:
@@ -32,9 +35,10 @@ class AsyncGitHubService:
     Provides non-blocking GitHub operations for better UI responsiveness.
     """
     
-    def __init__(self, github_service: GitHubService, study_logger: StudyLogger):
+    def __init__(self, github_service: GitHubService, study_logger: StudyLogger, repository_manager=None):
         self.github_service = github_service
         self.study_logger = study_logger
+        self.repository_manager = repository_manager
         self.operation_queue = queue.Queue()
         self.failed_operations = []
         self.worker_thread = None
@@ -56,18 +60,18 @@ class AsyncGitHubService:
             self.shutdown_event.clear()
             self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
             self.worker_thread.start()
-            print("AsyncGitHubService: Background worker started")
+            logger.info("AsyncGitHubService: Background worker started")
     
     def stop_worker(self):
         """Stop the background worker thread."""
         self.shutdown_event.set()
         if self.worker_thread and self.worker_thread.is_alive():
             self.worker_thread.join(timeout=10)
-            print("AsyncGitHubService: Background worker stopped")
+            logger.info("AsyncGitHubService: Background worker stopped")
     
     def _worker_loop(self):
         """Main worker loop that processes queued operations."""
-        print("AsyncGitHubService: Worker loop started")
+        logger.info("AsyncGitHubService: Worker loop started")
         
         while not self.shutdown_event.is_set():
             try:
@@ -92,11 +96,11 @@ class AsyncGitHubService:
                     # Retry failed operations
                     if operation.retry_count < operation.max_retries:
                         operation.retry_count += 1
-                        print(f"AsyncGitHubService: Retrying operation {operation.operation_type} "
+                        logger.info(f"AsyncGitHubService: Retrying operation {operation.operation_type} "
                               f"for {operation.participant_id} (attempt {operation.retry_count})")
                         self.operation_queue.put(operation)
                     else:
-                        print(f"AsyncGitHubService: Operation {operation.operation_type} "
+                        logger.info(f"AsyncGitHubService: Operation {operation.operation_type} "
                               f"for {operation.participant_id} failed permanently")
                         self.failed_operations.append(operation)
                 
@@ -104,13 +108,13 @@ class AsyncGitHubService:
                 self.operation_queue.task_done()
                 
             except Exception as e:
-                print(f"AsyncGitHubService: Worker error: {str(e)}")
+                logger.info(f"AsyncGitHubService: Worker error: {str(e)}")
                 continue
     
     def _process_operation(self, operation: GitHubOperation) -> bool:
         """Process a single GitHub operation."""
         try:
-            print(f"AsyncGitHubService: Processing {operation.operation_type} "
+            logger.info(f"AsyncGitHubService: Processing {operation.operation_type} "
                   f"for {operation.participant_id}")
             
             if operation.operation_type == 'log_route_visit':
@@ -126,11 +130,11 @@ class AsyncGitHubService:
             elif operation.operation_type == 'push_tutorial_code':
                 return self._process_push_tutorial_code(operation)
             else:
-                print(f"AsyncGitHubService: Unknown operation type: {operation.operation_type}")
+                logger.error(f"AsyncGitHubService: Unknown operation type: {operation.operation_type}")
                 return False
                 
         except Exception as e:
-            print(f"AsyncGitHubService: Error processing {operation.operation_type}: {str(e)}")
+            logger.error(f"AsyncGitHubService: Error processing {operation.operation_type}: {str(e)}")
             return False
     
     def _process_log_route_visit(self, operation: GitHubOperation) -> bool:
@@ -146,14 +150,15 @@ class AsyncGitHubService:
                 github_org=operation.kwargs.get('github_org')
             )
         except Exception as e:
-            print(f"AsyncGitHubService: Route visit logging failed: {str(e)}")
+            logger.error(f"AsyncGitHubService: Route visit logging failed: {str(e)}")
             return False
     
     def _process_commit_code_changes(self, operation: GitHubOperation) -> bool:
         """Process code commit operation."""
         try:
             # Import the repository manager from services to get the shared instance
-            return services._repository_manager.commit_and_backup_all(
+            if self.repository_manager:
+                return self.repository_manager.commit_and_backup_all(
                 participant_id=operation.participant_id,
                 study_stage=operation.kwargs.get('study_stage'),
                 commit_message=operation.kwargs.get('commit_message'),
@@ -162,7 +167,7 @@ class AsyncGitHubService:
                 github_org=operation.kwargs.get('github_org')
             )
         except Exception as e:
-            print(f"AsyncGitHubService: Code commit failed: {str(e)}")
+            logger.error(f"AsyncGitHubService: Code commit failed: {str(e)}")
             return False
     
     def _process_test_connectivity(self, operation: GitHubOperation) -> bool:
@@ -174,7 +179,7 @@ class AsyncGitHubService:
                 github_org=operation.kwargs.get('github_org')
             )
         except Exception as e:
-            print(f"AsyncGitHubService: Connectivity test failed: {str(e)}")
+            logger.error(f"AsyncGitHubService: Connectivity test failed: {str(e)}")
             return False
     
     def _process_mark_stage_transition(self, operation: GitHubOperation) -> bool:
@@ -189,7 +194,7 @@ class AsyncGitHubService:
                 github_org=operation.kwargs.get('github_org')
             )
         except Exception as e:
-            print(f"AsyncGitHubService: Stage transition marking failed: {str(e)}")
+            logger.error(f"AsyncGitHubService: Stage transition marking failed: {str(e)}")
             return False
     
     def _process_save_vscode_workspace_storage(self, operation: GitHubOperation) -> bool:
@@ -203,21 +208,22 @@ class AsyncGitHubService:
                 github_org=operation.kwargs.get('github_org')
             )
         except Exception as e:
-            print(f"AsyncGitHubService: VS Code workspace storage saving failed: {str(e)}")
+            logger.error(f"AsyncGitHubService: VS Code workspace storage saving failed: {str(e)}")
             return False
     
     def _process_push_tutorial_code(self, operation: GitHubOperation) -> bool:
         """Process tutorial code push operation."""
         try:
             # Import the repository manager from services to get the shared instance
-            return services._repository_manager.push_tutorial_code(
+            if self.repository_manager:
+                return self.repository_manager.push_tutorial_code(
                 participant_id=operation.participant_id,
                 development_mode=operation.kwargs.get('development_mode'),
                 github_token=operation.kwargs.get('github_token'),
                 github_org=operation.kwargs.get('github_org')
             )
         except Exception as e:
-            print(f"AsyncGitHubService: Tutorial code push failed: {str(e)}")
+            logger.error(f"AsyncGitHubService: Tutorial code push failed: {str(e)}")
             return False
 
     # Public async methods
@@ -238,7 +244,7 @@ class AsyncGitHubService:
             github_org=github_org
         )
         self.operation_queue.put(operation)
-        print(f"AsyncGitHubService: Queued route visit logging for {participant_id}")
+        logger.info(f"AsyncGitHubService: Queued route visit logging for {participant_id}")
     
     def queue_commit_code_changes(self, participant_id: str, study_stage: int,
                                 commit_message: str, development_mode: bool,
@@ -255,7 +261,7 @@ class AsyncGitHubService:
             github_org=github_org
         )
         self.operation_queue.put(operation)
-        print(f"AsyncGitHubService: Queued code commit for {participant_id}")
+        logger.info(f"AsyncGitHubService: Queued code commit for {participant_id}")
     
     def queue_test_connectivity(self, participant_id: str, github_token: Optional[str] = None,
                               github_org: Optional[str] = None):
@@ -267,7 +273,7 @@ class AsyncGitHubService:
             github_org=github_org
         )
         self.operation_queue.put(operation)
-        print(f"AsyncGitHubService: Queued connectivity test for {participant_id}")
+        logger.info(f"AsyncGitHubService: Queued connectivity test for {participant_id}")
     
     def queue_mark_stage_transition(self, participant_id: str, from_stage: int, to_stage: int,
                                   development_mode: bool, github_token: Optional[str] = None,
@@ -283,7 +289,7 @@ class AsyncGitHubService:
             github_org=github_org
         )
         self.operation_queue.put(operation)
-        print(f"AsyncGitHubService: Queued stage transition for {participant_id}")
+        logger.info(f"AsyncGitHubService: Queued stage transition for {participant_id}")
     
     def queue_save_vscode_workspace_storage(self, participant_id: str, study_stage: int,
                                           development_mode: bool, github_token: Optional[str] = None,
@@ -298,7 +304,7 @@ class AsyncGitHubService:
             github_org=github_org
         )
         self.operation_queue.put(operation)
-        print(f"AsyncGitHubService: Queued VS Code workspace storage save for {participant_id}")
+        logger.info(f"AsyncGitHubService: Queued VS Code workspace storage save for {participant_id}")
     
     def queue_push_tutorial_code(self, participant_id: str, development_mode: bool,
                                 github_token: Optional[str] = None, github_org: Optional[str] = None):
@@ -311,7 +317,7 @@ class AsyncGitHubService:
             github_org=github_org
         )
         self.operation_queue.put(operation)
-        print(f"AsyncGitHubService: Queued tutorial code push for {participant_id}")
+        logger.info(f"AsyncGitHubService: Queued tutorial code push for {participant_id}")
     
     def get_stats(self) -> Dict[str, Any]:
         """Get current operation statistics."""
@@ -326,6 +332,6 @@ class AsyncGitHubService:
     
     def wait_for_completion(self, timeout: Optional[float] = None):
         """Wait for all queued operations to complete."""
-        print("AsyncGitHubService: Waiting for queue completion...")
+        logger.info("AsyncGitHubService: Waiting for queue completion...")
         self.operation_queue.join()
-        print("AsyncGitHubService: All operations completed")
+        logger.info("AsyncGitHubService: All operations completed")

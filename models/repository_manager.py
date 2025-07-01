@@ -8,10 +8,14 @@ import shutil
 import subprocess
 import platform
 import threading
+import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 
 from .github_service import GitHubService
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 class RepositoryManager:
@@ -110,7 +114,7 @@ class RepositoryManager:
             workspace_path = current_dir
             repo_name = f"study-{participant_id}"
             repo_path = os.path.join(workspace_path, repo_name)
-            print(f"Development mode: Using local directory for repository: {repo_path}")
+            logger.info(f"Development mode: Using local directory for repository: {repo_path}")
         else:
             # Use user's home directory with a workspace folder
             home_dir = os.path.expanduser("~")
@@ -129,22 +133,22 @@ class RepositoryManager:
             # Create workspace directory if it doesn't exist (only needed in production mode)
             if not development_mode and not os.path.exists(workspace_path):
                 os.makedirs(workspace_path)
-                print(f"Created workspace directory: {workspace_path}")
+                logger.info(f"Created workspace directory: {workspace_path}")
             
             # Check if repository already exists
             if os.path.exists(repo_path) and os.path.isdir(repo_path):
                 # Check if it's a valid git repository
                 git_dir = os.path.join(repo_path, '.git')
                 if os.path.exists(git_dir):
-                    print(f"Repository already exists at: {repo_path}")
+                    logger.info(f"Repository already exists at: {repo_path}")
                     return True
                 else:
-                    print(f"Directory exists but is not a git repository: {repo_path}")
+                    logger.warning(f"Directory exists but is not a git repository: {repo_path}")
                     # Remove the directory if it's not a git repo
                     shutil.rmtree(repo_path)
             
             # Clone the repository
-            print(f"Cloning repository from {repo_url} to {repo_path}")
+            logger.info(f"Cloning repository from {repo_url} to {repo_path}")
             kwargs = self._get_subprocess_kwargs()
             kwargs['timeout'] = 60
             result = subprocess.run([
@@ -152,17 +156,17 @@ class RepositoryManager:
             ], **kwargs)
             
             if result.returncode == 0:
-                print(f"Successfully cloned repository to: {repo_path}")
+                logger.info(f"Successfully cloned repository to: {repo_path}")
                 return True
             else:
-                print(f"Failed to clone repository. Error: {result.stderr}")
+                logger.error(f"Failed to clone repository. Error: {result.stderr}")
                 return False
                 
         except subprocess.TimeoutExpired:
-            print("Git clone operation timed out")
+            logger.error("Git clone operation timed out")
             return False
         except Exception as e:
-            print(f"Error checking/cloning repository: {str(e)}")
+            logger.error(f"Error checking/cloning repository: {str(e)}")
             return False
     
     def ensure_git_config(self, repo_path: str, participant_id: str) -> bool:
@@ -194,7 +198,7 @@ class RepositoryManager:
                 subprocess.run([
                     'git', 'config', 'user.name', f'{participant_id}'
                 ], **kwargs)
-                print(f"Set git user.name for participant {participant_id}")
+                logger.info(f"Set git user.name for participant {participant_id}")
             
             # Check if user.email is set
             kwargs = self._get_subprocess_kwargs()
@@ -210,18 +214,18 @@ class RepositoryManager:
                 subprocess.run([
                     'git', 'config', 'user.email', f'{participant_id}@study.local'
                 ], **kwargs)
-                print(f"Set git user.email for participant {participant_id}")
+                logger.info(f"Set git user.email for participant {participant_id}")
                 
             return True
             
         except Exception as e:
-            print(f"Warning: Failed to set git config: {str(e)}")
+            logger.warning(f"Failed to set git config: {str(e)}")
             return False
         finally:
             try:
                 os.chdir(original_cwd)
             except Exception as e:
-                print(f"Warning: Failed to restore working directory: {str(e)}")
+                logger.warning(f"Failed to restore working directory: {str(e)}")
     
     def ensure_branch(self, repo_path: str, branch_name: str, source_branch: str = None, 
                      participant_id: str = None, github_token: Optional[str] = None, 
@@ -252,7 +256,7 @@ class RepositoryManager:
                 original_cwd = os.getcwd()
                 os.chdir(repo_path)
                 
-                print(f"Setting up branch: {branch_name} (locked)")
+                logger.info(f"Setting up branch: {branch_name} (locked)")
                 
                 # Step 1: Check current branch to see if backup is needed
                 kwargs = self._get_subprocess_kwargs()
@@ -264,7 +268,7 @@ class RepositoryManager:
                 kwargs['timeout'] = 15
                 result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
                 if result.returncode != 0:
-                    print(f"Warning: Failed to fetch from remote: {result.stderr}")
+                    logger.warning(f"Failed to fetch from remote: {result.stderr}")
                 
                 # Step 3: Check if the branch already exists locally
                 result = subprocess.run(['git', 'branch', '--list', branch_name], **kwargs)
@@ -272,72 +276,72 @@ class RepositoryManager:
                 
                 if branch_exists and current_branch == branch_name:
                     # Already on the correct branch, no backup needed
-                    print(f"Already on correct branch {branch_name}")
+                    logger.info(f"Already on correct branch {branch_name}")
                     return True
                 
                 if branch_exists:
                     # Branch exists, just switch to it
-                    print(f"Branch {branch_name} exists locally, switching to it")
+                    logger.info(f"Branch {branch_name} exists locally, switching to it")
                     result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
                     if result.returncode != 0:
-                        print(f"Failed to checkout existing branch {branch_name}: {result.stderr}")
+                        logger.warning(f"Failed to checkout existing branch {branch_name}: {result.stderr}")
                         return False
-                    print(f"Successfully switched to existing {branch_name}")
+                    logger.info(f"Successfully switched to existing {branch_name}")
                     return True
                 
                 # Step 4: Create new branch from specified source
                 if source_branch:
                     # Create from specified source branch
-                    print(f"Creating {branch_name} from {source_branch}")
+                    logger.info(f"Creating {branch_name} from {source_branch}")
                     
                     # Check if source branch exists (local or remote)
                     if source_branch.startswith('origin/'):
                         # Remote source branch
                         result = subprocess.run(['git', 'branch', '-r', '--list', source_branch], **kwargs)
                         if source_branch not in result.stdout:
-                            print(f"Error: {source_branch} branch not found. Cannot create {branch_name}.")
+                            logger.error(f"Error: {source_branch} branch not found. Cannot create {branch_name}.")
                             return False
                     else:
                         # Local source branch
                         result = subprocess.run(['git', 'branch', '--list', source_branch], **kwargs)
                         if source_branch not in result.stdout:
-                            print(f"Error: {source_branch} branch not found locally. Cannot create {branch_name}.")
+                            logger.error(f"Error: {source_branch} branch not found locally. Cannot create {branch_name}.")
                             return False
                     
                     # Create branch from source
                     result = subprocess.run(['git', 'checkout', '-b', branch_name, source_branch], **kwargs)
                     if result.returncode != 0:
-                        print(f"Failed to create {branch_name} from {source_branch}: {result.stderr}")
+                        logger.warning(f"Failed to create {branch_name} from {source_branch}: {result.stderr}")
                         return False
                     
-                    print(f"Successfully created {branch_name} from {source_branch}")
+                    logger.info(f"Successfully created {branch_name} from {source_branch}")
                 else:
                     # Try to create from remote branch with same name
                     remote_branch = f"origin/{branch_name}"
                     result = subprocess.run(['git', 'branch', '-r', '--list', remote_branch], **kwargs)
                     if remote_branch in result.stdout:
                         # Create from remote branch
-                        print(f"Creating local {branch_name} branch from remote")
+                        logger.info(f"Creating local {branch_name} branch from remote")
                         result = subprocess.run(['git', 'checkout', '-b', branch_name, remote_branch], **kwargs)
                         if result.returncode != 0:
-                            print(f"Failed to create {branch_name} from remote: {result.stderr}")
+                            logger.warning(f"Failed to create {branch_name} from remote: {result.stderr}")
                             return False
-                        print(f"Successfully created and switched to {branch_name} branch")
+                        logger.info(f"Successfully created and switched to {branch_name} branch")
                     else:
-                        print(f"Error: {remote_branch} branch not found. {branch_name} branch must exist on remote or source_branch must be specified.")
+                        logger.error(f"Error: {remote_branch} branch not found. {branch_name} branch must exist on remote or source_branch must be specified.")
                         return False
                 
-                print(f"Successfully ensured branch {branch_name} is active")
+                logger.info(f"Successfully ensured branch {branch_name} is active")
                 return True
                 
             except Exception as e:
-                print(f"Error ensuring branch: {str(e)}")
+                logger.info(f"Error ensuring branch: {str(e)}")
                 return False
             finally:
                 try:
                     os.chdir(original_cwd)
                 except Exception as e:
-                    print(f"Warning: Failed to restore working directory: {str(e)}")
+                    logger.warning(f"Failed to restore working directory: {str(e)}")
 
     def ensure_stage_branch(self, repo_path: str, study_stage: int, participant_id: str = None, 
                            github_token: Optional[str] = None, github_org: str = None, 
@@ -368,7 +372,7 @@ class RepositoryManager:
             # Stage-2: Always create from local stage-1 branch
             source_branch = "stage-1"
         else:
-            print(f"Error: Unsupported study stage: {study_stage}")
+            logger.error(f"Error: Unsupported study stage: {study_stage}")
             return False
         
         return self.ensure_branch(
@@ -402,7 +406,7 @@ class RepositoryManager:
         repo_path = self.get_repository_path(participant_id, development_mode)
         
         if not os.path.exists(repo_path):
-            print(f"Repository does not exist at: {repo_path}")
+            logger.info(f"Repository does not exist at: {repo_path}")
             return False
         
         # Ensure git config is set up
@@ -410,10 +414,10 @@ class RepositoryManager:
         
         # Ensure the correct stage branch is active (with backup support for initial setup)
         if not self.ensure_stage_branch(repo_path, study_stage, participant_id, github_token, github_org):
-            print(f"Failed to set up branch for stage {study_stage}")
+            logger.warning(f"Failed to set up branch for stage {study_stage}")
             return False
         
-        print(f"Repository successfully set up for stage {study_stage}")
+        logger.info(f"Repository successfully set up for stage {study_stage}")
         return True
     
     def commit_and_backup_all(self, participant_id: str, study_stage: Optional[int], commit_message: str,
@@ -447,13 +451,13 @@ class RepositoryManager:
             try:
                 # Check if repository exists
                 if not os.path.exists(repo_path):
-                    print(f"Repository does not exist at: {repo_path}")
+                    logger.info(f"Repository does not exist at: {repo_path}")
                     return False
                 
                 # Check if it's a valid git repository
                 git_dir = os.path.join(repo_path, '.git')
                 if not os.path.exists(git_dir):
-                    print(f"Not a valid git repository: {repo_path}")
+                    logger.info(f"Not a valid git repository: {repo_path}")
                     return False
                 
                 # Ensure git config is set up
@@ -462,34 +466,34 @@ class RepositoryManager:
                 # Change to repository directory
                 os.chdir(repo_path)
                 
-                print(f"Committing changes for {participant_id} (locked)")
+                logger.info(f"Committing changes for {participant_id} (locked)")
                 
                 # Step 1: Commit any changes on the current branch
                 success = self._commit_current_branch_changes(study_stage, commit_message)
                 if not success:
-                    print("Failed to commit changes on current branch")
+                    logger.info("Failed to commit changes on current branch")
                     return False
                 
                 # Step 2: Push all branches to remote as backup (if we have authentication)
                 if github_token:
                     success = self._push_all_branches_backup(participant_id, github_token, github_org)
                     if not success:
-                        print("Warning: Failed to backup all branches to remote")
+                        logger.info("Warning: Failed to backup all branches to remote")
                         # Don't return False here - local commit succeeded
                 else:
-                    print("No GitHub token provided - changes committed locally only")
+                    logger.info("No GitHub token provided - changes committed locally only")
                 
-                print(f"Successfully completed commit and backup workflow for {participant_id}")
+                logger.info(f"Successfully completed commit and backup workflow for {participant_id}")
                 return True
                 
             except Exception as e:
-                print(f"Error in commit and backup workflow: {str(e)}")
+                logger.info(f"Error in commit and backup workflow: {str(e)}")
                 return False
             finally:
                 try:
                     os.chdir(original_cwd)
                 except Exception as e:
-                    print(f"Warning: Failed to restore original working directory: {str(e)}")
+                    logger.warning(f"Failed to restore original working directory: {str(e)}")
     
     def _commit_current_branch_changes(self, study_stage: Optional[int], commit_message: str) -> bool:
         """
@@ -509,13 +513,13 @@ class RepositoryManager:
             result = subprocess.run(['git', 'status', '--porcelain'], **kwargs)
             
             if result.returncode != 0:
-                print(f"Failed to check git status. Error: {result.stderr}")
+                logger.warning(f"Failed to check git status. Error: {result.stderr}")
                 return False
             
             has_changes = bool(result.stdout.strip())
             
             if not has_changes:
-                print("No changes to commit on current branch")
+                logger.info("No changes to commit on current branch")
                 return True
             
             # Get current branch name for logging
@@ -525,7 +529,7 @@ class RepositoryManager:
             # Add all changes
             result = subprocess.run(['git', 'add', '.'], **kwargs)
             if result.returncode != 0:
-                print(f"Failed to add changes. Error: {result.stderr}")
+                logger.warning(f"Failed to add changes. Error: {result.stderr}")
                 return False
             
             # Create commit message with timestamp
@@ -538,14 +542,14 @@ class RepositoryManager:
             # Commit changes
             result = subprocess.run(['git', 'commit', '-m', full_commit_message], **kwargs)
             if result.returncode != 0:
-                print(f"Failed to commit changes. Error: {result.stderr}")
+                logger.warning(f"Failed to commit changes. Error: {result.stderr}")
                 return False
             
-            print(f"Successfully committed changes on branch '{current_branch}': {full_commit_message}")
+            logger.info(f"Successfully committed changes on branch '{current_branch}': {full_commit_message}")
             return True
             
         except Exception as e:
-            print(f"Error committing current branch changes: {str(e)}")
+            logger.info(f"Error committing current branch changes: {str(e)}")
             return False
     
     def _push_all_branches_backup(self, participant_id: str, github_token: str, github_org: str) -> bool:
@@ -569,36 +573,36 @@ class RepositoryManager:
             kwargs['timeout'] = 10
             result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
             if result.returncode != 0:
-                print(f"Warning: Failed to set authenticated remote URL: {result.stderr}")
+                logger.warning(f"Failed to set authenticated remote URL: {result.stderr}")
             
             # Get list of all local branches
             result = subprocess.run(['git', 'branch', '--format=%(refname:short)'], **kwargs)
             if result.returncode != 0:
-                print(f"Failed to get list of local branches: {result.stderr}")
+                logger.warning(f"Failed to get list of local branches: {result.stderr}")
                 return False
             
             local_branches = [branch.strip() for branch in result.stdout.strip().split('\n') if branch.strip()]
             
             if not local_branches:
-                print("No local branches found to backup")
+                logger.info("No local branches found to backup")
                 return True
             
-            print(f"Backing up {len(local_branches)} branches to remote...")
+            logger.info(f"Backing up {len(local_branches)} branches to remote...")
             
             # Push each branch with retry logic
             success_count = 0
             for branch in local_branches:
                 if self._push_branch_with_retry(branch, max_retries=2):
                     success_count += 1
-                    print(f"Successfully backed up branch: {branch}")
+                    logger.info(f"Successfully backed up branch: {branch}")
                 else:
-                    print(f"Warning: Failed to backup branch: {branch}")
+                    logger.warning(f"Failed to backup branch: {branch}")
             
-            print(f"Backup completed: {success_count}/{len(local_branches)} branches backed up successfully")
+            logger.info(f"Backup completed: {success_count}/{len(local_branches)} branches backed up successfully")
             return success_count > 0  # Success if at least one branch was backed up
             
         except Exception as e:
-            print(f"Error backing up all branches: {str(e)}")
+            logger.info(f"Error backing up all branches: {str(e)}")
             return False
     
     def _push_branch_with_retry(self, branch_name: str, max_retries: int = 2) -> bool:
@@ -621,17 +625,17 @@ class RepositoryManager:
                 if result.returncode == 0:
                     return True
                 else:
-                    print(f"Push failed for {branch_name} (attempt {attempt + 1}/{max_retries}): {result.stderr}")
+                    logger.info(f"Push failed for {branch_name} (attempt {attempt + 1}/{max_retries}): {result.stderr}")
                     if attempt < max_retries - 1:
                         # Try to fetch and retry on next attempt
                         fetch_result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
                         if fetch_result.returncode != 0:
-                            print(f"Failed to fetch before retry: {fetch_result.stderr}")
+                            logger.warning(f"Failed to fetch before retry: {fetch_result.stderr}")
                         
             except subprocess.TimeoutExpired:
-                print(f"Push timeout for {branch_name} (attempt {attempt + 1}/{max_retries})")
+                logger.info(f"Push timeout for {branch_name} (attempt {attempt + 1}/{max_retries})")
             except Exception as e:
-                print(f"Error pushing {branch_name} (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                logger.info(f"Error pushing {branch_name} (attempt {attempt + 1}/{max_retries}): {str(e)}")
         
         return False
 
@@ -671,19 +675,19 @@ class RepositoryManager:
                     participant_id, development_mode, github_token, github_org
                 )
                 if not success:
-                    print(f"Failed to clone repository for tutorial setup")
+                    logger.warning(f"Failed to clone repository for tutorial setup")
                     return False
             
             # Ensure git config is set up
             if not self.ensure_git_config(repo_path, participant_id):
-                print(f"Failed to set up git config for tutorial")
+                logger.warning(f"Failed to set up git config for tutorial")
                 return False
             
             # Use the simplified tutorial branch method
             return self.ensure_tutorial_branch(repo_path)
             
         except Exception as e:
-            print(f"Error setting up tutorial branch: {str(e)}")
+            logger.info(f"Error setting up tutorial branch: {str(e)}")
             return False
 
     def push_tutorial_code(self, participant_id: str, development_mode: bool,
@@ -706,7 +710,7 @@ class RepositoryManager:
             repo_path = self.get_repository_path(participant_id, development_mode)
             
             if not os.path.exists(repo_path):
-                print(f"Repository does not exist for tutorial push: {repo_path}")
+                logger.info(f"Repository does not exist for tutorial push: {repo_path}")
                 return False
             
             # Get repository-specific lock to prevent concurrent access
@@ -718,7 +722,7 @@ class RepositoryManager:
                 os.chdir(repo_path)
                 
                 try:
-                    print(f"Pushing tutorial code for {participant_id} (locked)")
+                    logger.info(f"Pushing tutorial code for {participant_id} (locked)")
                     
                     # Make sure we're on the tutorial branch
                     kwargs = self._get_subprocess_kwargs()
@@ -726,7 +730,7 @@ class RepositoryManager:
                     
                     result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
                     if result.returncode != 0:
-                        print(f"Failed to check current branch: {result.stderr}")
+                        logger.warning(f"Failed to check current branch: {result.stderr}")
                         return False
                         
                     current_branch = result.stdout.strip()
@@ -734,20 +738,20 @@ class RepositoryManager:
                         # Switch to tutorial branch
                         result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
                         if result.returncode != 0:
-                            print(f"Failed to switch to tutorial branch: {result.stderr}")
+                            logger.warning(f"Failed to switch to tutorial branch: {result.stderr}")
                             return False
                     
                     # Sync with remote tutorial branch if it exists
                     result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
                     if result.returncode != 0:
-                        print(f"Warning: Failed to fetch from remote: {result.stderr}")
+                        logger.warning(f"Failed to fetch from remote: {result.stderr}")
                     
                     result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/tutorial'], **kwargs)
                     if result.stdout.strip():
                         # Remote tutorial branch exists, pull updates
                         result = subprocess.run(['git', 'pull', 'origin', 'tutorial'], **kwargs)
                         if result.returncode != 0:
-                            print(f"Warning: Failed to pull tutorial updates: {result.stderr}")
+                            logger.warning(f"Failed to pull tutorial updates: {result.stderr}")
                     
                 finally:
                     os.chdir(original_cwd)
@@ -764,7 +768,7 @@ class RepositoryManager:
                 )
                 
         except Exception as e:
-            print(f"Error pushing tutorial code: {str(e)}")
+            logger.info(f"Error pushing tutorial code: {str(e)}")
             return False
     
 
@@ -825,16 +829,16 @@ class VSCodeManager:
         try:
             # Check if repository exists
             if not os.path.exists(repo_path):
-                print(f"Repository does not exist at: {repo_path}")
+                logger.info(f"Repository does not exist at: {repo_path}")
                 return False
             
             # If study_stage is provided, ensure the correct branch is active (skip backup for VS Code opening)
             if study_stage is not None:
                 if not self.repository_manager.ensure_stage_branch(repo_path, study_stage, skip_backup=True):
-                    print(f"Warning: Failed to ensure correct branch for stage {study_stage}")
+                    logger.warning(f"Failed to ensure correct branch for stage {study_stage}")
             
             # Try to open VS Code with the repository
-            print(f"Opening VS Code with repository: {repo_path}")
+            logger.info(f"Opening VS Code with repository: {repo_path}")
             
             # Use 'code' command to open VS Code with the repository folder
             kwargs = self._get_subprocess_kwargs()
@@ -844,10 +848,10 @@ class VSCodeManager:
             ], **kwargs)
             
             if result.returncode == 0:
-                print(f"Successfully opened VS Code with repository: {repo_path}")
+                logger.info(f"Successfully opened VS Code with repository: {repo_path}")
                 return True
             else:
-                print(f"Failed to open VS Code. Error: {result.stderr}")
+                logger.warning(f"Failed to open VS Code. Error: {result.stderr}")
                 # Try alternative method for macOS
                 try:
                     kwargs = self._get_subprocess_kwargs()
@@ -857,23 +861,23 @@ class VSCodeManager:
                     ], **kwargs)
                     
                     if result.returncode == 0:
-                        print(f"Successfully opened VS Code using 'open' command: {repo_path}")
+                        logger.info(f"Successfully opened VS Code using 'open' command: {repo_path}")
                         return True
                     else:
-                        print(f"Failed to open VS Code with 'open' command. Error: {result.stderr}")
+                        logger.warning(f"Failed to open VS Code with 'open' command. Error: {result.stderr}")
                         return False
                 except Exception as e:
-                    print(f"Error trying 'open' command: {str(e)}")
+                    logger.info(f"Error trying 'open' command: {str(e)}")
                     return False
                 
         except subprocess.TimeoutExpired:
-            print("VS Code open operation timed out")
+            logger.info("VS Code open operation timed out")
             return False
         except FileNotFoundError:
-            print("VS Code ('code' command) not found in PATH. Please ensure VS Code is installed and the 'code' command is available.")
+            logger.info("VS Code ('code' command) not found in PATH. Please ensure VS Code is installed and the 'code' command is available.")
             return False
         except Exception as e:
-            print(f"Error opening VS Code: {str(e)}")
+            logger.info(f"Error opening VS Code: {str(e)}")
             return False
 
     def open_vscode_with_tutorial(self, participant_id: str, development_mode: bool) -> bool:
@@ -896,12 +900,12 @@ class VSCodeManager:
         try:
             # Check if repository exists
             if not os.path.exists(repo_path):
-                print(f"Repository does not exist at: {repo_path}")
+                logger.info(f"Repository does not exist at: {repo_path}")
                 return False
             
             # Ensure we're on tutorial branch using simplified method
             if not self.repository_manager.ensure_tutorial_branch(repo_path):
-                print(f"Failed to ensure tutorial branch")
+                logger.warning(f"Failed to ensure tutorial branch")
                 return False
             
             # Double-check that we're actually on the tutorial branch before opening VS Code
@@ -917,21 +921,21 @@ class VSCodeManager:
                 if result.returncode == 0:
                     current_branch = result.stdout.strip()
                     if current_branch != 'tutorial':
-                        print(f"Warning: Repository is on '{current_branch}' branch instead of 'tutorial'. Switching to tutorial branch.")
+                        logger.warning(f"Repository is on '{current_branch}' branch instead of 'tutorial'. Switching to tutorial branch.")
                         checkout_result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
                         if checkout_result.returncode != 0:
-                            print(f"Failed to checkout tutorial branch: {checkout_result.stderr}")
+                            logger.warning(f"Failed to checkout tutorial branch: {checkout_result.stderr}")
                             return False
-                        print("Successfully switched to tutorial branch")
+                        logger.info("Successfully switched to tutorial branch")
                     else:
-                        print("Confirmed: Repository is on tutorial branch")
+                        logger.info("Confirmed: Repository is on tutorial branch")
                 else:
-                    print(f"Warning: Could not verify current branch: {result.stderr}")
+                    logger.warning(f"Could not verify current branch: {result.stderr}")
             finally:
                 os.chdir(original_cwd)
             
             # Try to open VS Code with the repository
-            print(f"Opening VS Code with tutorial branch: {repo_path}")
+            logger.info(f"Opening VS Code with tutorial branch: {repo_path}")
             
             # Use 'code' command to open VS Code with the repository folder
             kwargs = self._get_subprocess_kwargs()
@@ -941,10 +945,10 @@ class VSCodeManager:
             ], **kwargs)
             
             if result.returncode == 0:
-                print(f"Successfully opened VS Code with tutorial: {repo_path}")
+                logger.info(f"Successfully opened VS Code with tutorial: {repo_path}")
                 return True
             else:
-                print(f"Failed to open VS Code. Error: {result.stderr}")
+                logger.warning(f"Failed to open VS Code. Error: {result.stderr}")
                 # Try alternative method for macOS
                 try:
                     kwargs = self._get_subprocess_kwargs()
@@ -954,21 +958,21 @@ class VSCodeManager:
                     ], **kwargs)
                     
                     if result.returncode == 0:
-                        print(f"Successfully opened VS Code with tutorial using 'open' command: {repo_path}")
+                        logger.info(f"Successfully opened VS Code with tutorial using 'open' command: {repo_path}")
                         return True
                     else:
-                        print(f"Failed to open VS Code with 'open' command. Error: {result.stderr}")
+                        logger.warning(f"Failed to open VS Code with 'open' command. Error: {result.stderr}")
                         return False
                 except Exception as e:
-                    print(f"Error trying 'open' command: {str(e)}")
+                    logger.info(f"Error trying 'open' command: {str(e)}")
                     return False
                 
         except subprocess.TimeoutExpired:
-            print("VS Code open operation timed out")
+            logger.info("VS Code open operation timed out")
             return False
         except FileNotFoundError:
-            print("VS Code ('code' command) not found in PATH. Please ensure VS Code is installed and the 'code' command is available.")
+            logger.info("VS Code ('code' command) not found in PATH. Please ensure VS Code is installed and the 'code' command is available.")
             return False
         except Exception as e:
-            print(f"Error opening VS Code with tutorial: {str(e)}")
+            logger.info(f"Error opening VS Code with tutorial: {str(e)}")
             return False

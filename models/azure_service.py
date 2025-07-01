@@ -4,7 +4,11 @@ Handles Azure Instance Metadata Service queries for participant information.
 """
 
 import requests
+import logging
 from typing import Optional
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 class AzureMetadataService:
@@ -34,7 +38,7 @@ class AzureMetadataService:
             Study stage (1 or 2)
         """
         if development_mode:
-            print(f"Development mode: Using mocked study stage: {dev_stage}")
+            logger.info(f"Development mode: Using mocked study stage: {dev_stage}")
             return dev_stage
         
         try:
@@ -52,12 +56,12 @@ class AzureMetadataService:
                                 if stage in [1, 2]:
                                     return stage
                             except ValueError:
-                                print(f"Invalid study_stage tag value: {value.strip()}")
+                                logger.info(f"Invalid study_stage tag value: {value.strip()}")
             
             # Default to stage 1 if tag not found or invalid
             return 1
         except Exception as e:
-            print(f"Error getting study stage from Azure VM tags: {str(e)}")
+            logger.info(f"Error getting study stage from Azure VM tags: {str(e)}")
             # Default to stage 1 if we can't reach the metadata service or any other error occurs
             return 1
     
@@ -75,7 +79,7 @@ class AzureMetadataService:
             The participant_id if found, otherwise returns a default message
         """
         if development_mode:
-            print(f"Development mode: Using mocked participant ID: {dev_participant_id}")
+            logger.info(f"Development mode: Using mocked participant ID: {dev_participant_id}")
             return dev_participant_id
         
         try:
@@ -109,7 +113,7 @@ class AzureMetadataService:
             The coding condition ('vibe' or 'ai-assisted'), defaults to 'vibe' if not found
         """
         if development_mode:
-            print(f"Development mode: Using mocked coding condition: {dev_coding_condition}")
+            logger.info(f"Development mode: Using mocked coding condition: {dev_coding_condition}")
             return dev_coding_condition
         
         try:
@@ -126,11 +130,11 @@ class AzureMetadataService:
                             if condition in ['vibe', 'ai-assisted']:
                                 return condition
                             else:
-                                print(f"Invalid coding_condition tag value: {value.strip()}")
+                                logger.info(f"Invalid coding_condition tag value: {value.strip()}")
             
             # Default to 'vibe' if tag not found or invalid
             return "vibe"
         except Exception as e:
-            print(f"Error getting coding condition from Azure VM tags: {str(e)}")
+            logger.info(f"Error getting coding condition from Azure VM tags: {str(e)}")
             # Default to 'vibe' if we can't reach the metadata service or any other error occurs
             return "vibe"

@@ -4,8 +4,12 @@ Handles participant identification, coding conditions, and study stages.
 """
 
 import hashlib
+import logging
 from typing import Optional
 from .azure_service import AzureMetadataService
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 class ParticipantManager:

@@ -25,6 +25,21 @@ import shutil
 import zipfile
 import signal
 import time
+import logging
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+
+from .github_service import GitHubService
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
+import subprocess
+import platform
+import shutil
+import zipfile
+import signal
+import time
+import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
@@ -159,14 +174,14 @@ class ScreenRecorder:
                         continue
             
             if latest_file:
-                print(f"Found latest recording file: {latest_file}")
+                logger.info(f"Found latest recording file: {latest_file}")
             else:
-                print(f"No recording file found in default locations created after {datetime.fromtimestamp(recording_start_time)}")
+                logger.info(f"No recording file found in default locations created after {datetime.fromtimestamp(recording_start_time)}")
             
             return latest_file
             
         except Exception as e:
-            print(f"Error finding latest recording file: {e}")
+            logger.info(f"Error finding latest recording file: {e}")
             return None
     
     def start_recording(self, participant_id: str, study_stage: int, logs_directory: str) -> bool:
@@ -183,7 +198,7 @@ class ScreenRecorder:
         """
         # Check if OBS is already running before attempting to start
         if self.is_recording():
-            print("Screen recording is already in progress - OBS is running")
+            logger.info("Screen recording is already in progress - OBS is running")
             return True  # Return True since recording is already active
         
         # Also check for any existing OBS processes more thoroughly
@@ -193,10 +208,10 @@ class ScreenRecorder:
                 # Kill any existing OBS processes to ensure clean start
                 cleanup_cmd = ['pkill', '-f', '/Applications/OBS.app/Contents/MacOS/OBS']
                 subprocess.run(cleanup_cmd, capture_output=True, text=True)
-                print("Cleaned up any existing OBS processes")
+                logger.info("Cleaned up any existing OBS processes")
                 time.sleep(1)  # Give processes time to terminate
             except Exception as e:
-                print(f"Error during OBS cleanup: {e}")
+                logger.info(f"Error during OBS cleanup: {e}")
         
         try:
             # Create recordings directory if it doesn't exist
@@ -210,7 +225,7 @@ class ScreenRecorder:
             
             # Get OBS executable path
             obs_executable = self._get_obs_executable_path()
-            print(f"Using OBS executable: {obs_executable}")
+            logger.info(f"Using OBS executable: {obs_executable}")
             
             # OBS command for screen recording using default configuration
             system = platform.system()
@@ -241,8 +256,8 @@ class ScreenRecorder:
             self.recording_start_time = time.time()
             
             # Start the recording process
-            print(f"Starting OBS screen recording: {recording_filename}")
-            print(f"Command: {' '.join(obs_cmd)}")
+            logger.info(f"Starting OBS screen recording: {recording_filename}")
+            logger.info(f"Command: {' '.join(obs_cmd)}")
             
             recording_kwargs = self._get_recording_subprocess_kwargs()
             
@@ -251,13 +266,13 @@ class ScreenRecorder:
                 obs_dir = os.path.dirname(obs_executable)
                 if os.path.exists(obs_dir):
                     recording_kwargs['cwd'] = obs_dir
-                    print(f"Setting OBS working directory to: {obs_dir}")
+                    logger.info(f"Setting OBS working directory to: {obs_dir}")
             
             self.recording_process = subprocess.Popen(obs_cmd, **recording_kwargs)
-            print(f"OBS process started with PID: {self.recording_process.pid}")
+            logger.info(f"OBS process started with PID: {self.recording_process.pid}")
             
             # Give OBS more time to start and stabilize
-            print("Waiting for OBS to start...")
+            logger.info("Waiting for OBS to start...")
             time.sleep(3)
             
             # Check if OBS is now running with multiple attempts
@@ -265,27 +280,27 @@ class ScreenRecorder:
             max_attempts = 3
             for attempt in range(max_attempts):
                 recording_active = self.is_recording()
-                print(f"OBS recording status check (attempt {attempt + 1}): {recording_active}")
+                logger.info(f"OBS recording status check (attempt {attempt + 1}): {recording_active}")
                 if recording_active:
                     break
                 if attempt < max_attempts - 1:
-                    print(f"OBS not detected yet, waiting 2 more seconds...")
+                    logger.info(f"OBS not detected yet, waiting 2 more seconds...")
                     time.sleep(2)
             
             if not recording_active:
-                print("OBS failed to start recording - checking process status")
+                logger.info("OBS failed to start recording - checking process status")
                 if self.recording_process:
                     poll_result = self.recording_process.poll()
-                    print(f"OBS process poll result: {poll_result}")
+                    logger.info(f"OBS process poll result: {poll_result}")
                     if poll_result is not None:
                         try:
                             stdout, stderr = self.recording_process.communicate(timeout=1)
-                            print(f"OBS stdout: {stdout.decode()[:200] if stdout else 'None'}")
-                            print(f"OBS stderr: {stderr.decode()[:200] if stderr else 'None'}")
+                            logger.info(f"OBS stdout: {stdout.decode()[:200] if stdout else 'None'}")
+                            logger.info(f"OBS stderr: {stderr.decode()[:200] if stderr else 'None'}")
                         except subprocess.TimeoutExpired:
-                            print("OBS process still running but communication timed out")
+                            logger.info("OBS process still running but communication timed out")
                         except Exception as e:
-                            print(f"Error communicating with OBS process: {e}")
+                            logger.info(f"Error communicating with OBS process: {e}")
                 
                 self.recording_process = None
                 self.recording_file_path = None
@@ -293,21 +308,21 @@ class ScreenRecorder:
                 return False
             else:
                 # OBS is running, but it may not be using our specified file path
-                print(f"⚠️  OBS is recording but may be using its own default output location")
-                print(f"   Expected file: {self.recording_file_path}")
-                print(f"   OBS may save to: ~/Movies/ with its own naming convention")
+                logger.warning(f" OBS is recording but may be using its own default output location")
+                logger.info(f"   Expected file: {self.recording_file_path}")
+                logger.info(f"   OBS may save to: ~/Movies/ with its own naming convention")
             
-            print(f"✅ OBS screen recording started successfully for participant {participant_id}, stage {study_stage}")
+            logger.info(f"OBS screen recording started successfully for participant {participant_id}, stage {study_stage}")
             return True
             
         except FileNotFoundError:
-            print("❌ OBS Studio not found. Please install OBS Studio and make sure it's accessible.")
+            logger.info("❌ OBS Studio not found. Please install OBS Studio and make sure it's accessible.")
             self.recording_process = None
             self.recording_file_path = None
             self.recording_start_time = None
             return False
         except Exception as e:
-            print(f"❌ Failed to start OBS screen recording: {e}")
+            logger.error(f"Failed to start OBS screen recording: {e}")
             self.recording_process = None
             self.recording_file_path = None
             self.recording_start_time = None
@@ -321,11 +336,11 @@ class ScreenRecorder:
             True if recording stopped successfully, False otherwise
         """
         if not self.is_recording():
-            print("No OBS screen recording in progress")
+            logger.info("No OBS screen recording in progress")
             return False
         
         try:
-            print("Stopping OBS screen recording...")
+            logger.info("Stopping OBS screen recording...")
             
             system = platform.system()
             # Simple subprocess kwargs for process control
@@ -346,7 +361,7 @@ class ScreenRecorder:
                 check_cmd = ['powershell', '-Command', 'Get-Process obs64 -ErrorAction SilentlyContinue']
                 check_result = subprocess.run(check_cmd, **kwargs)
                 if check_result.returncode == 0:
-                    print("OBS still running, force closing...")
+                    logger.info("OBS still running, force closing...")
                     force_stop_cmd = ['powershell', '-Command', 
                                     'Get-Process obs64 -ErrorAction SilentlyContinue | Stop-Process -Force']
                     subprocess.run(force_stop_cmd, **kwargs)
@@ -378,7 +393,7 @@ class ScreenRecorder:
                     pass
             
             # Wait a moment for OBS to fully stop and save the file
-            print("Waiting for OBS to finish saving the recording file...")
+            logger.info("Waiting for OBS to finish saving the recording file...")
             time.sleep(5)  # Give OBS more time to save the file
             
             # Try to find and move the recording file from default location
@@ -405,23 +420,23 @@ class ScreenRecorder:
                                     os.makedirs(dest_dir, exist_ok=True)
                                     
                                     # Move the file from default location to our recordings directory
-                                    print(f"Moving recording file from {source_file} to {self.recording_file_path}")
+                                    logger.info(f"Moving recording file from {source_file} to {self.recording_file_path}")
                                     shutil.move(source_file, self.recording_file_path)
                                     moved_file_path = self.recording_file_path
-                                    print(f"✅ Successfully moved recording file to: {self.recording_file_path}")
+                                    logger.info(f"Successfully moved recording file to: {self.recording_file_path}")
                                     
                                 except (OSError, PermissionError, shutil.Error) as e:
-                                    print(f"⚠️  Failed to move recording file: {e}")
-                                    print(f"   Recording remains at: {source_file}")
+                                    logger.warning(f" Failed to move recording file: {e}")
+                                    logger.info(f"   Recording remains at: {source_file}")
                                     moved_file_path = source_file
                             else:
-                                print(f"⚠️  Could not find recording file in default OBS locations")
-                                print(f"   Expected to find file created after: {datetime.fromtimestamp(self.recording_start_time)}")
+                                logger.warning(f" Could not find recording file in default OBS locations")
+                                logger.info(f"   Expected to find file created after: {datetime.fromtimestamp(self.recording_start_time)}")
                     except (ValueError, IndexError, AttributeError) as e:
-                        print(f"⚠️  Could not parse recording filename for file moving: {e}")
+                        logger.warning(f" Could not parse recording filename for file moving: {e}")
             
             final_file_location = moved_file_path or "default OBS location"
-            print(f"OBS screen recording stopped successfully. File location: {final_file_location}")
+            logger.info(f"OBS screen recording stopped successfully. File location: {final_file_location}")
             
             # Reset the recording state
             self.recording_process = None
@@ -432,7 +447,7 @@ class ScreenRecorder:
             return True
             
         except Exception as e:
-            print(f"Failed to stop OBS screen recording: {e}")
+            logger.warning(f"Failed to stop OBS screen recording: {e}")
             self.recording_process = None
             self.recording_file_path = None
             self.recording_start_time = None
@@ -474,7 +489,7 @@ class ScreenRecorder:
                     mux_check_cmd = ['pgrep', '-f', 'obs-ffmpeg-mux']
                     mux_result = subprocess.run(mux_check_cmd, **kwargs)
                     has_mux = mux_result.returncode == 0
-                    print(f"OBS main process running: {is_running}, obs-ffmpeg-mux active: {has_mux}")
+                    logger.info(f"OBS main process running: {is_running}, obs-ffmpeg-mux active: {has_mux}")
                     # Return true if either main process is running (OBS is open)
                     # The mux process indicates active recording but may not always be present
                     return is_running
@@ -488,7 +503,7 @@ class ScreenRecorder:
             return is_running
                 
         except Exception as e:
-            print(f"Error checking OBS recording status: {e}")
+            logger.info(f"Error checking OBS recording status: {e}")
             return False
     
     def _get_recording_subprocess_kwargs(self) -> Dict[str, Any]:
@@ -526,7 +541,7 @@ class ScreenRecorder:
             True if upload was successful, False otherwise
         """
         if not file_path or not os.path.exists(file_path):
-            print(f"❌ File not found for Azure upload: {file_path}")
+            logger.error(f"File not found for Azure upload: {file_path}")
             return False
         
         try:
@@ -534,45 +549,45 @@ class ScreenRecorder:
             filename = os.path.basename(file_path)
             blob_url = f"https://{storage_account}.blob.core.windows.net/{blob_container}/{filename}"
             
-            print(f"Uploading {filename} to Azure Blob Storage...")
+            logger.info(f"Uploading {filename} to Azure Blob Storage...")
             
             # Get subprocess kwargs for cross-platform compatibility
             kwargs = self._get_recording_subprocess_kwargs()
             kwargs['timeout'] = 300  # 5 minute timeout for large files
             
             # Step 1: Login to Azure using managed identity
-            print("Authenticating with Azure using managed identity...")
+            logger.info("Authenticating with Azure using managed identity...")
             login_cmd = ['azcopy', 'login', '--identity']
             
             login_result = subprocess.run(login_cmd, **kwargs)
             if login_result.returncode != 0:
-                print(f"❌ Azure login failed: {login_result.stderr}")
+                logger.error(f"Azure login failed: {login_result.stderr}")
                 return False
             
-            print("✅ Successfully authenticated with Azure")
+            logger.info("✅ Successfully authenticated with Azure")
             
             # Step 2: Upload the file
-            print(f"Copying file to blob: {blob_url}")
+            logger.info(f"Copying file to blob: {blob_url}")
             copy_cmd = ['azcopy', 'copy', file_path, blob_url]
             
             copy_result = subprocess.run(copy_cmd, **kwargs)
             if copy_result.returncode != 0:
-                print(f"❌ Azure upload failed: {copy_result.stderr}")
+                logger.error(f"Azure upload failed: {copy_result.stderr}")
                 return False
             
-            print(f"✅ Successfully uploaded {filename} to Azure Blob Storage")
-            print(f"   Blob URL: {blob_url}")
+            logger.info(f"Successfully uploaded {filename} to Azure Blob Storage")
+            logger.info(f"   Blob URL: {blob_url}")
             
             return True
             
         except subprocess.TimeoutExpired:
-            print(f"❌ Azure upload timed out for file: {filename}")
+            logger.error(f"Azure upload timed out for file: {filename}")
             return False
         except FileNotFoundError:
-            print("❌ azcopy command not found. Please install Azure CLI and azcopy.")
+            logger.info("❌ azcopy command not found. Please install Azure CLI and azcopy.")
             return False
         except Exception as e:
-            print(f"❌ Error uploading to Azure Blob Storage: {e}")
+            logger.error(f"Error uploading to Azure Blob Storage: {e}")
             return False
     
     def upload_recording_to_azure(self, participant_id: str, study_stage: int) -> bool:
@@ -587,7 +602,7 @@ class ScreenRecorder:
             True if upload was successful, False otherwise
         """
         if not self.recording_file_path:
-            print("❌ No recording file path available for Azure upload")
+            logger.info("❌ No recording file path available for Azure upload")
             return False
         
         # Check if the file exists (it might have been moved by stop_recording)
@@ -600,24 +615,24 @@ class ScreenRecorder:
                 found_file = self._find_latest_recording_file(participant_id, study_stage, self.recording_start_time)
                 if found_file and os.path.exists(found_file):
                     file_to_upload = found_file
-                    print(f"Found recording file at: {found_file}")
+                    logger.info(f"Found recording file at: {found_file}")
         
         if not file_to_upload:
-            print("❌ Recording file not found for Azure upload")
+            logger.info("❌ Recording file not found for Azure upload")
             return False
         
         # Upload to Azure
         success = self.upload_to_azure_blob(file_to_upload)
         
         if success:
-            print(f"✅ Recording for participant {participant_id}, stage {study_stage} uploaded to Azure")
+            logger.info(f"Recording for participant {participant_id}, stage {study_stage} uploaded to Azure")
             # Optionally remove local file after successful upload
             # Uncomment the following lines if you want to delete local files after upload:
             # try:
             #     os.remove(file_to_upload)
-            #     print(f"🗑️  Local recording file removed: {file_to_upload}")
+            #     logger.info(f"🗑️  Local recording file removed: {file_to_upload}")
             # except Exception as e:
-            #     print(f"⚠️  Could not remove local file: {e}")
+            #     logger.warning(f" Could not remove local file: {e}")
         
         return success
         
@@ -684,7 +699,7 @@ class StudyLogger:
         """
         # Skip screen recording in development mode
         if development_mode:
-            print("Screen recording disabled in development mode")
+            logger.info("Screen recording disabled in development mode")
             return True
             
         logs_directory = self.get_logs_directory_path(participant_id, development_mode)
@@ -810,7 +825,7 @@ class StudyLogger:
             # Create logs directory if it doesn't exist
             if not os.path.exists(logs_path):
                 os.makedirs(logs_path)
-                print(f"Created logs directory: {logs_path}")
+                logger.info(f"Created logs directory: {logs_path}")
             
             # Check if it's already a git repository
             git_dir = os.path.join(logs_path, '.git')
@@ -825,7 +840,7 @@ class StudyLogger:
                 ], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to initialize git repository in logs directory. Error: {result.stderr}")
+                    logger.warning(f"Failed to initialize git repository in logs directory. Error: {result.stderr}")
                     return False
                 
                 # Set up git config (basic config for logging)
@@ -846,7 +861,7 @@ class StudyLogger:
                 subprocess.run(['git', 'add', 'README.md'], **kwargs)
                 subprocess.run(['git', 'commit', '-m', 'Initial commit for logging repository'], **kwargs)
                 
-                print(f"Initialized logging repository at: {logs_path}")
+                logger.info(f"Initialized logging repository at: {logs_path}")
             
             # Ensure we're in the logs directory
             os.chdir(logs_path)
@@ -859,13 +874,13 @@ class StudyLogger:
             return self._ensure_logging_branch_with_sync()
             
         except Exception as e:
-            print(f"Error ensuring logging repository: {str(e)}")
+            logger.info(f"Error ensuring logging repository: {str(e)}")
             return False
         finally:
             try:
                 os.chdir(original_cwd)
             except Exception as e:
-                print(f"Warning: Failed to restore original working directory: {str(e)}")
+                logger.warning(f"Failed to restore original working directory: {str(e)}")
     
     def _setup_logging_remote(self, participant_id: str, github_token: str, github_org: str) -> bool:
         """
@@ -893,20 +908,20 @@ class StudyLogger:
                 kwargs["timeout"] = 10
                 result = subprocess.run(['git', 'remote', 'add', 'origin', authenticated_url], **kwargs)
                 if result.returncode != 0:
-                    print(f"Warning: Failed to add remote: {result.stderr}")
+                    logger.warning(f"Failed to add remote: {result.stderr}")
                     return False
             else:
                 # Update remote URL
                 kwargs["timeout"] = 10
                 result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
                 if result.returncode != 0:
-                    print(f"Warning: Failed to set remote URL: {result.stderr}")
+                    logger.warning(f"Failed to set remote URL: {result.stderr}")
                     return False
                     
             return True
             
         except Exception as e:
-            print(f"Error setting up logging remote: {str(e)}")
+            logger.info(f"Error setting up logging remote: {str(e)}")
             return False
     
     def _ensure_logging_branch_with_sync(self) -> bool:
@@ -925,7 +940,7 @@ class StudyLogger:
             kwargs["timeout"] = 15
             result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
             if result.returncode != 0:
-                print(f"Warning: Failed to fetch from remote (may not exist yet): {result.stderr}")
+                logger.warning(f"Failed to fetch from remote (may not exist yet): {result.stderr}")
             
             # Check if our unique branch exists locally
             kwargs = self._get_subprocess_kwargs()
@@ -941,13 +956,13 @@ class StudyLogger:
             
             if local_branch_exists and remote_branch_exists:
                 # Both exist - checkout local and pull updates
-                print(f"Branch {branch_name} exists both locally and remotely - syncing")
+                logger.info(f"Branch {branch_name} exists both locally and remotely - syncing")
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 10
                 result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to checkout branch {branch_name}: {result.stderr}")
+                    logger.warning(f"Failed to checkout branch {branch_name}: {result.stderr}")
                     return False
                 
                 # Pull updates
@@ -956,24 +971,24 @@ class StudyLogger:
                 result = subprocess.run(['git', 'pull', 'origin', branch_name], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Warning: Failed to pull branch {branch_name} updates: {result.stderr}")
+                    logger.warning(f"Failed to pull branch {branch_name} updates: {result.stderr}")
                 else:
-                    print(f"Successfully synchronized branch {branch_name} with remote")
+                    logger.info(f"Successfully synchronized branch {branch_name} with remote")
                     
             elif local_branch_exists:
                 # Only local exists - just switch to it
-                print(f"Switching to existing local branch {branch_name}")
+                logger.info(f"Switching to existing local branch {branch_name}")
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 10
                 result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to checkout branch {branch_name}: {result.stderr}")
+                    logger.warning(f"Failed to checkout branch {branch_name}: {result.stderr}")
                     return False
                     
             elif remote_branch_exists:
                 # Only remote exists - create local tracking branch
-                print(f"Creating local branch {branch_name} tracking remote origin/{branch_name}")
+                logger.info(f"Creating local branch {branch_name} tracking remote origin/{branch_name}")
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 15
                 result = subprocess.run([
@@ -981,12 +996,12 @@ class StudyLogger:
                 ], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to create tracking branch {branch_name}: {result.stderr}")
+                    logger.warning(f"Failed to create tracking branch {branch_name}: {result.stderr}")
                     return False
                     
             else:
                 # Neither exists - create new branch from main/master
-                print(f"Creating new branch {branch_name}")
+                logger.info(f"Creating new branch {branch_name}")
                 
                 # First ensure we're on main/master
                 kwargs = self._get_subprocess_kwargs()
@@ -996,7 +1011,7 @@ class StudyLogger:
                     # Try master if main doesn't exist
                     result = subprocess.run(['git', 'checkout', 'master'], **kwargs)
                     if result.returncode != 0:
-                        print(f"Failed to checkout main/master branch: {result.stderr}")
+                        logger.warning(f"Failed to checkout main/master branch: {result.stderr}")
                         return False
                 
                 # Create new branch
@@ -1005,14 +1020,14 @@ class StudyLogger:
                 result = subprocess.run(['git', 'checkout', '-b', branch_name], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to create branch {branch_name}: {result.stderr}")
+                    logger.warning(f"Failed to create branch {branch_name}: {result.stderr}")
                     return False
             
-            print(f"Successfully ensured branch {branch_name} is active")
+            logger.info(f"Successfully ensured branch {branch_name} is active")
             return True
             
         except Exception as e:
-            print(f"Error ensuring logging branch: {str(e)}")
+            logger.info(f"Error ensuring logging branch: {str(e)}")
             return False
     
     def log_route_visit(self, participant_id: str, route_name: str, development_mode: bool,
@@ -1037,7 +1052,7 @@ class StudyLogger:
         try:
             # Ensure logging repository exists
             if not self.ensure_logging_repository(participant_id, development_mode, github_token, github_org):
-                print(f"Failed to ensure logging repository for participant {participant_id}")
+                logger.warning(f"Failed to ensure logging repository for participant {participant_id}")
                 return False
             
             logs_path = self.get_logs_directory_path(participant_id, development_mode)
@@ -1065,14 +1080,14 @@ class StudyLogger:
                     with open(log_file_path, 'r', encoding='utf-8') as f:
                         logs_data = json.load(f)
                 except (json.JSONDecodeError, FileNotFoundError):
-                    print("Could not read existing session log file, creating new one")
+                    logger.info("Could not read existing session log file, creating new one")
             
             # Check if this route has already been visited in this session for this stage
             existing_visits = [visit for visit in logs_data['visits'] 
                              if visit.get('route') == route_name and visit.get('study_stage') == study_stage]
             
             if existing_visits:
-                print(f"Route {route_name} already logged in this session for stage {study_stage}, skipping")
+                logger.info(f"Route {route_name} already logged in this session for stage {study_stage}, skipping")
                 return True
             
             # Create log entry
@@ -1108,7 +1123,7 @@ class StudyLogger:
             result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
             
             if result.returncode == 0:
-                print(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}, branch {self.get_logging_branch_name()}")
+                logger.info(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}, branch {self.get_logging_branch_name()}")
                 
                 # Push to remote if token is available
                 if github_token and github_org:
@@ -1116,17 +1131,17 @@ class StudyLogger:
                 
                 return True
             else:
-                print(f"Failed to commit log entry. Error: {result.stderr}")
+                logger.warning(f"Failed to commit log entry. Error: {result.stderr}")
                 return False
                 
         except Exception as e:
-            print(f"Error logging route visit: {str(e)}")
+            logger.info(f"Error logging route visit: {str(e)}")
             return False
         finally:
             try:
                 os.chdir(original_cwd)
             except Exception as e:
-                print(f"Warning: Failed to restore working directory: {str(e)}")
+                logger.warning(f"Failed to restore working directory: {str(e)}")
     
     def push_logs_to_remote(self, participant_id: str, development_mode: bool,
                           github_token: str, github_org: str) -> bool:
@@ -1151,20 +1166,20 @@ class StudyLogger:
             
             # Ensure logging repository and branch are properly set up with sync
             if not self.ensure_logging_repository(participant_id, development_mode, github_token, github_org):
-                print(f"Failed to ensure logging repository for push")
+                logger.warning(f"Failed to ensure logging repository for push")
                 return False
             
             # Use enhanced push with retry logic for logging
             return self._push_logs_with_retry(participant_id, github_token, github_org)
                 
         except Exception as e:
-            print(f"Error pushing logs to remote: {str(e)}")
+            logger.info(f"Error pushing logs to remote: {str(e)}")
             return False
         finally:
             try:
                 os.chdir(original_cwd)
             except Exception as e:
-                print(f"Warning: Failed to restore original working directory: {str(e)}")
+                logger.warning(f"Failed to restore original working directory: {str(e)}")
     
     def _push_logs_with_retry(self, participant_id: str, github_token: str, 
                              github_org: str, max_retries: int = 3) -> bool:
@@ -1192,7 +1207,7 @@ class StudyLogger:
                 result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Warning: Failed to set authenticated remote URL: {result.stderr}")
+                    logger.warning(f"Failed to set authenticated remote URL: {result.stderr}")
                 
                 # Attempt to push our unique logging branch
                 branch_name = self.get_logging_branch_name()
@@ -1201,32 +1216,32 @@ class StudyLogger:
                 result = subprocess.run(['git', 'push', 'origin', branch_name], **kwargs)
                 
                 if result.returncode == 0:
-                    print(f"Successfully pushed logs to remote for participant {participant_id}")
+                    logger.info(f"Successfully pushed logs to remote for participant {participant_id}")
                     return True
                 else:
                     error_msg = result.stderr.lower()
                     if 'rejected' in error_msg or 'non-fast-forward' in error_msg:
-                        print(f"Log push rejected (attempt {attempt + 1}/{max_retries}). Trying to sync with remote...")
+                        logger.info(f"Log push rejected (attempt {attempt + 1}/{max_retries}). Trying to sync with remote...")
                         
                         # Try to sync with remote logging branch
                         if self._sync_logging_with_remote():
-                            print("Successfully synced logging with remote. Retrying push...")
+                            logger.info("Successfully synced logging with remote. Retrying push...")
                             continue
                         else:
-                            print("Failed to sync logging with remote branch")
+                            logger.info("Failed to sync logging with remote branch")
                             if attempt == max_retries - 1:
                                 return False
                     else:
-                        print(f"Log push failed with error: {result.stderr}")
+                        logger.info(f"Log push failed with error: {result.stderr}")
                         if attempt == max_retries - 1:
                             return False
                         
             except subprocess.TimeoutExpired:
-                print(f"Log push operation timed out (attempt {attempt + 1}/{max_retries})")
+                logger.info(f"Log push operation timed out (attempt {attempt + 1}/{max_retries})")
                 if attempt == max_retries - 1:
                     return False
             except Exception as e:
-                print(f"Error during log push attempt {attempt + 1}: {str(e)}")
+                logger.info(f"Error during log push attempt {attempt + 1}: {str(e)}")
                 if attempt == max_retries - 1:
                     return False
         
@@ -1249,7 +1264,7 @@ class StudyLogger:
             result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
             
             if result.returncode != 0:
-                print(f"Failed to fetch from remote: {result.stderr}")
+                logger.warning(f"Failed to fetch from remote: {result.stderr}")
                 return False
             
             # Try to pull and merge
@@ -1258,14 +1273,14 @@ class StudyLogger:
             result = subprocess.run(['git', 'pull', 'origin', branch_name], **kwargs)
             
             if result.returncode == 0:
-                print(f"Successfully merged remote changes for branch {branch_name}")
+                logger.info(f"Successfully merged remote changes for branch {branch_name}")
                 return True
             else:
-                print(f"Failed to merge remote changes for branch {branch_name}: {result.stderr}")
+                logger.warning(f"Failed to merge remote changes for branch {branch_name}: {result.stderr}")
                 return False
                     
         except Exception as e:
-            print(f"Error syncing logging with remote: {str(e)}")
+            logger.info(f"Error syncing logging with remote: {str(e)}")
             return False
     
     def mark_stage_transition(self, participant_id: str, from_stage: int, to_stage: int,
@@ -1289,7 +1304,7 @@ class StudyLogger:
         try:
             # Ensure logging repository exists
             if not self.ensure_logging_repository(participant_id, development_mode, github_token, github_org):
-                print(f"Failed to ensure logging repository for participant {participant_id}")
+                logger.warning(f"Failed to ensure logging repository for participant {participant_id}")
                 return False
             
             logs_path = self.get_logs_directory_path(participant_id, development_mode)
@@ -1311,7 +1326,7 @@ class StudyLogger:
                     with open(log_file_path, 'r', encoding='utf-8') as f:
                         transitions_data = json.load(f)
                 except (json.JSONDecodeError, FileNotFoundError):
-                    print("Could not read existing transitions file, creating new one")
+                    logger.info("Could not read existing transitions file, creating new one")
             
             # Check if this transition has already been logged
             transition_key = f"stage_{from_stage}_to_{to_stage}"
@@ -1319,7 +1334,7 @@ class StudyLogger:
                                   if t.get('from_stage') == from_stage and t.get('to_stage') == to_stage]
             
             if existing_transitions:
-                print(f"Transition {transition_key} already logged, skipping")
+                logger.info(f"Transition {transition_key} already logged, skipping")
                 return True
             
             # Create transition log entry
@@ -1351,7 +1366,7 @@ class StudyLogger:
             result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
             
             if result.returncode == 0:
-                print(f"Successfully logged stage transition: {transition_key} for participant {participant_id}")
+                logger.info(f"Successfully logged stage transition: {transition_key} for participant {participant_id}")
                 
                 # Push to remote if token is available
                 if github_token and github_org:
@@ -1359,17 +1374,17 @@ class StudyLogger:
                 
                 return True
             else:
-                print(f"Failed to commit transition entry. Error: {result.stderr}")
+                logger.warning(f"Failed to commit transition entry. Error: {result.stderr}")
                 return False
                 
         except Exception as e:
-            print(f"Error logging stage transition: {str(e)}")
+            logger.info(f"Error logging stage transition: {str(e)}")
             return False
         finally:
             try:
                 os.chdir(original_cwd)
             except Exception as e:
-                print(f"Warning: Failed to restore working directory: {str(e)}")
+                logger.warning(f"Failed to restore working directory: {str(e)}")
     
     def get_stage_transition_history(self, participant_id: str, development_mode: bool) -> List[Dict]:
         """
@@ -1395,7 +1410,7 @@ class StudyLogger:
             return transitions_data.get('transitions', [])
             
         except Exception as e:
-            print(f"Error reading stage transition history: {str(e)}")
+            logger.info(f"Error reading stage transition history: {str(e)}")
             return []
     
     def get_vscode_workspace_storage_path(self) -> Optional[str]:
@@ -1446,12 +1461,12 @@ class StudyLogger:
             # Get VS Code workspace storage path
             vscode_storage_path = self.get_vscode_workspace_storage_path()
             if not vscode_storage_path or not os.path.exists(vscode_storage_path):
-                print(f"VS Code workspace storage not found at: {vscode_storage_path}")
+                logger.info(f"VS Code workspace storage not found at: {vscode_storage_path}")
                 return False
             
             # Ensure logging repository exists
             if not self.ensure_logging_repository(participant_id, development_mode, github_token, github_org):
-                print("Failed to ensure logging repository exists")
+                logger.info("Failed to ensure logging repository exists")
                 return False
             
             logs_path = self.get_logs_directory_path(participant_id, development_mode)
@@ -1476,7 +1491,7 @@ class StudyLogger:
             archive_path = os.path.join(vscode_logs_dir, archive_filename)
             
             # Create zip archive of workspace storage
-            print(f"Creating VS Code workspace storage archive: {archive_filename}")
+            logger.info(f"Creating VS Code workspace storage archive: {archive_filename}")
             with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(vscode_storage_path):
                     for file in files:
@@ -1487,7 +1502,7 @@ class StudyLogger:
                             zipf.write(file_path, arcname)
                         except (OSError, PermissionError) as e:
                             # Skip files that can't be read (e.g., locked files)
-                            print(f"Skipping file due to permission error: {file_path} - {e}")
+                            logger.info(f"Skipping file due to permission error: {file_path} - {e}")
                             continue
             
             # Add files to git
@@ -1501,20 +1516,20 @@ class StudyLogger:
             result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
             
             if result.returncode == 0:
-                print(f"Successfully saved VS Code workspace storage for stage {study_stage}")
+                logger.info(f"Successfully saved VS Code workspace storage for stage {study_stage}")
                 return True
             else:
-                print(f"Failed to commit VS Code workspace storage: {result.stderr}")
+                logger.warning(f"Failed to commit VS Code workspace storage: {result.stderr}")
                 return False
                 
         except Exception as e:
-            print(f"Error saving VS Code workspace storage: {str(e)}")
+            logger.info(f"Error saving VS Code workspace storage: {str(e)}")
             return False
         finally:
             try:
                 os.chdir(original_cwd)
             except Exception as e:
-                print(f"Error returning to original directory: {str(e)}")
+                logger.info(f"Error returning to original directory: {str(e)}")
 
     def get_session_log_history(self, participant_id: str, development_mode: bool, study_stage: int) -> List[Dict]:
         """
@@ -1548,7 +1563,7 @@ class StudyLogger:
             return stage_visits
             
         except Exception as e:
-            print(f"Error reading session log history: {str(e)}")
+            logger.info(f"Error reading session log history: {str(e)}")
             return []
         
     def get_all_session_logs(self, participant_id: str, development_mode: bool) -> List[Dict]:
@@ -1580,7 +1595,7 @@ class StudyLogger:
                 result = subprocess.run(['git', 'branch', '-a'], **kwargs)
                 
                 if result.returncode != 0:
-                    print(f"Failed to list git branches: {result.stderr}")
+                    logger.warning(f"Failed to list git branches: {result.stderr}")
                     return []
                 
                 # Parse branch names
@@ -1611,7 +1626,7 @@ class StudyLogger:
                         result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
                         
                         if result.returncode != 0:
-                            print(f"Failed to checkout branch {branch_name}: {result.stderr}")
+                            logger.warning(f"Failed to checkout branch {branch_name}: {result.stderr}")
                             continue
                         
                         # Read session log from this branch
@@ -1623,7 +1638,7 @@ class StudyLogger:
                                 all_sessions.append(session_data)
                     
                     except (json.JSONDecodeError, FileNotFoundError, PermissionError) as e:
-                        print(f"Could not read session log from branch {branch_name}: {e}")
+                        logger.info(f"Could not read session log from branch {branch_name}: {e}")
                         continue
                 
                 # Restore original branch
@@ -1639,7 +1654,7 @@ class StudyLogger:
             return all_sessions
             
         except Exception as e:
-            print(f"Error reading all session logs: {str(e)}")
+            logger.info(f"Error reading all session logs: {str(e)}")
             return []
 
 class SessionTracker:
