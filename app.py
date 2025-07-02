@@ -119,7 +119,7 @@ def check_automatic_rerouting(current_route, participant_id, study_stage, develo
             # Map route names to URL endpoints
             route_mapping = {
                 'home': 'home',
-                'consent': 'consent_form',
+                'consent': 'consent',
                 'background_questionnaire': 'background_questionnaire', 
                 'tutorial': 'tutorial',
                 'task': 'task',
@@ -239,7 +239,7 @@ def debug_session():
                          recording_active=recording_active)
 
 @app.route('/consent', methods=['GET', 'POST'])
-def consent_form():
+def consent():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
     
@@ -273,7 +273,7 @@ def consent_form():
             return redirect(url_for('background_questionnaire'))
         else:
             # If consent not given, redirect back to consent form
-            return redirect(url_for('consent_form'))
+            return redirect(url_for('consent'))
     
     # Load consent data from JSON
     consent_data = {}
@@ -299,16 +299,26 @@ def consent_form():
         mark_route_as_logged(session, 'consent', study_stage)
     
     # Parse procedure steps
-    procedure_steps = []
-    if consent_data.get('procedure'):
+    procedure_steps1 = []
+    if consent_data.get('procedure1'):
         # Split by numbered points and clean up
-        lines = consent_data['procedure'].split('\n')
+        lines = consent_data['procedure1'].split('\n')
         for line in lines:
             line = line.strip()
             if line and (line[0].isdigit() or line.startswith('1.') or line.startswith('2.') or line.startswith('3.') or line.startswith('4.')):
                 # Remove the number and period, keep the text
                 step_text = line.split('.', 1)[1].strip() if '.' in line else line
-                procedure_steps.append(step_text)
+                procedure_steps1.append(step_text)
+    procedure_steps2 = []
+    if consent_data.get('procedure2'):
+        # Split by numbered points and clean up
+        lines = consent_data['procedure2'].split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and (line[0].isdigit() or line.startswith('1.') or line.startswith('2.') or line.startswith('3.') or line.startswith('4.')):
+                # Remove the number and period, keep the text
+                step_text = line.split('.', 1)[1].strip() if '.' in line else line
+                procedure_steps2.append(step_text)
     
     # Prepare researcher names for display
     researchers_names = ""
@@ -335,7 +345,8 @@ def consent_form():
                          purpose=consent_data.get('purpose', ''),
                          goal=consent_data.get('goal', ''),
                          storage_time=consent_data.get('storageTime', '5 years'),
-                         procedure_steps=procedure_steps,
+                         procedure_steps1=procedure_steps1,
+                         procedure_steps2=procedure_steps2,
                          researchers=consent_data.get('researchers', []))
 
 @app.route('/background-questionnaire')
@@ -349,7 +360,7 @@ def background_questionnaire():
     
     # Check if consent has been given for stage 1 participants
     if study_stage == 1 and not session.get('consent_given'):
-        return redirect(url_for('consent_form'))
+        return redirect(url_for('consent'))
     
     # Check for automatic rerouting based on session history
     reroute = check_automatic_rerouting('background_questionnaire', participant_id, study_stage, DEVELOPMENT_MODE)
@@ -667,13 +678,13 @@ def task():
         )
         mark_route_as_logged(session, 'task', study_stage)
         
-        # Push tutorial code when transitioning from tutorial to task (only for stage 1)
-        if study_stage == 1:
-            logger.info(f"Pushing tutorial code for {participant_id} before starting coding task")
-            push_tutorial_code(
-                participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, 
-                async_mode=ASYNC_GITHUB_MODE
-            )
+    # Push tutorial code when transitioning from tutorial to task (only for stage 1)
+    if study_stage == 1:
+        logger.info(f"Pushing tutorial code for {participant_id} before starting coding task")
+        push_tutorial_code(
+            participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, 
+            async_mode=ASYNC_GITHUB_MODE
+        )
     
     # Initialize timer if not started yet
     if timer_start is None:

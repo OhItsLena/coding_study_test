@@ -26,6 +26,7 @@ import zipfile
 import signal
 import time
 import logging
+import random
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
@@ -33,15 +34,6 @@ from .github_service import GitHubService
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
-import subprocess
-import platform
-import shutil
-import zipfile
-import signal
-import time
-import logging
-from datetime import datetime
-from typing import Dict, List, Any, Optional
 
 from .github_service import GitHubService
 
@@ -663,18 +655,17 @@ class StudyLogger:
         """
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         # Add some randomness to handle multiple starts within the same second
-        import random
         random_suffix = f"{random.randint(1000, 9999)}"
         return f"{timestamp}_{random_suffix}"
     
     def get_logging_branch_name(self) -> str:
         """
-        Get the unique logging branch name for this app run.
+        Get the logging branch name (always 'logging').
         
         Returns:
-            Unique branch name for this session
+            Standard logging branch name
         """
-        return f"logging-{self.session_id}"
+        return "logging"
     
     def get_session_log_filename(self) -> str:
         """
@@ -926,14 +917,14 @@ class StudyLogger:
     
     def _ensure_logging_branch_with_sync(self) -> bool:
         """
-        Ensure unique logging branch exists for this session.
-        Each app run gets its own branch to avoid conflicts.
+        Ensure logging branch exists and is synced with remote.
+        Uses a single 'logging' branch for all sessions.
         
         Returns:
             True if successful, False otherwise
         """
         try:
-            branch_name = self.get_logging_branch_name()
+            branch_name = self.get_logging_branch_name()  # Always 'logging'
             
             # First, try to fetch from remote to get latest refs
             kwargs = self._get_subprocess_kwargs()
@@ -942,13 +933,13 @@ class StudyLogger:
             if result.returncode != 0:
                 logger.warning(f"Failed to fetch from remote (may not exist yet): {result.stderr}")
             
-            # Check if our unique branch exists locally
+            # Check if logging branch exists locally
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 10
             result = subprocess.run(['git', 'branch', '--list', branch_name], **kwargs)
             local_branch_exists = branch_name in result.stdout
             
-            # Check if our unique branch exists remotely
+            # Check if logging branch exists remotely
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 10
             result = subprocess.run(['git', 'branch', '-r', '--list', f'origin/{branch_name}'], **kwargs)
@@ -965,7 +956,7 @@ class StudyLogger:
                     logger.warning(f"Failed to checkout branch {branch_name}: {result.stderr}")
                     return False
                 
-                # Pull updates
+                # Pull updates to get existing session data
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 20
                 result = subprocess.run(['git', 'pull', 'origin', branch_name], **kwargs)
@@ -1063,27 +1054,44 @@ class StudyLogger:
             # Switch to logs directory
             os.chdir(logs_path)
             
-            # Ensure we're on our unique logging branch
+            # Ensure we're on the logging branch
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 5
             subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
             
-            # Load existing logs for this session or create new structure
+            # Load existing logs from remote or create new structure
             logs_data = {
-                'session_id': self.session_id,
-                'session_start_time': datetime.now().isoformat(),
-                'visits': []
+                'sessions': []
             }
             
             if os.path.exists(log_file_path):
                 try:
                     with open(log_file_path, 'r', encoding='utf-8') as f:
                         logs_data = json.load(f)
+                        # Ensure sessions key exists for compatibility
+                        if 'sessions' not in logs_data:
+                            logs_data['sessions'] = []
                 except (json.JSONDecodeError, FileNotFoundError):
                     logger.info("Could not read existing session log file, creating new one")
             
+            # Find or create session data for this session_id
+            current_session = None
+            for session in logs_data['sessions']:
+                if session.get('session_id') == self.session_id:
+                    current_session = session
+                    break
+            
+            if current_session is None:
+                # Create new session entry
+                current_session = {
+                    'session_id': self.session_id,
+                    'session_start_time': datetime.now().isoformat(),
+                    'visits': []
+                }
+                logs_data['sessions'].append(current_session)
+            
             # Check if this route has already been visited in this session for this stage
-            existing_visits = [visit for visit in logs_data['visits'] 
+            existing_visits = [visit for visit in current_session['visits'] 
                              if visit.get('route') == route_name and visit.get('study_stage') == study_stage]
             
             if existing_visits:
@@ -1106,8 +1114,8 @@ class StudyLogger:
             if session_data:
                 log_entry['session_data'] = session_data
             
-            # Add to logs
-            logs_data['visits'].append(log_entry)
+            # Add to current session's visits
+            current_session['visits'].append(log_entry)
             
             # Write updated logs
             with open(log_file_path, 'w', encoding='utf-8') as f:
@@ -1118,12 +1126,12 @@ class StudyLogger:
             kwargs["timeout"] = 5
             subprocess.run(['git', 'add', self.get_session_log_filename()], **kwargs)
             
-            commit_message = f"Log route visit: {route_name} (stage {study_stage}, branch {self.get_logging_branch_name()}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+            commit_message = f"Log route visit: {route_name} (stage {study_stage}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
             kwargs["timeout"] = 10
             result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
             
             if result.returncode == 0:
-                logger.info(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}, branch {self.get_logging_branch_name()}")
+                logger.info(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}")
                 
                 # Push to remote if token is available
                 if github_token and github_org:
@@ -1314,7 +1322,7 @@ class StudyLogger:
             # Switch to logs directory
             os.chdir(logs_path)
             
-            # Ensure we're on our unique logging branch
+            # Ensure we're on the logging branch
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 5
             subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
@@ -1475,7 +1483,7 @@ class StudyLogger:
             # Switch to logs directory
             os.chdir(logs_path)
             
-            # Ensure we're on our unique logging branch
+            # Ensure we're on the logging branch
             kwargs = self._get_subprocess_kwargs()
             kwargs["timeout"] = 5
             subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
@@ -1553,14 +1561,17 @@ class StudyLogger:
             with open(log_file_path, 'r', encoding='utf-8') as f:
                 logs_data = json.load(f)
             
-            # Filter visits for the specified stage and sort by timestamp
-            stage_visits = [visit for visit in logs_data.get('visits', []) 
-                          if visit.get('study_stage') == study_stage]
-            
+            # Collect visits from all sessions for the specified stage
+            all_stage_visits = []
+            for session in logs_data.get('sessions', []):
+                stage_visits = [visit for visit in session.get('visits', []) 
+                            if visit.get('study_stage') == study_stage]
+                all_stage_visits.extend(stage_visits)
+
             # Sort by timestamp (using timestamp_unix for reliable sorting)
-            stage_visits.sort(key=lambda x: x.get('timestamp_unix', 0))
-            
-            return stage_visits
+            all_stage_visits.sort(key=lambda x: x.get('timestamp_unix', 0))
+
+            return all_stage_visits
             
         except Exception as e:
             logger.info(f"Error reading session log history: {str(e)}")
@@ -1568,7 +1579,7 @@ class StudyLogger:
         
     def get_all_session_logs(self, participant_id: str, development_mode: bool) -> List[Dict]:
         """
-        Get all session logs for a participant across all app runs by checking all logging branches.
+        Get all session logs for a participant from the single logging branch.
         
         Args:
             participant_id: The participant's unique identifier
@@ -1584,74 +1595,31 @@ class StudyLogger:
                 return []
             
             original_cwd = os.getcwd()
-            all_sessions = []
             
             try:
                 os.chdir(logs_path)
                 
-                # Get all branches that start with 'logging-'
+                # Ensure we're on the logging branch
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'branch', '-a'], **kwargs)
+                result = subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
                 
                 if result.returncode != 0:
-                    logger.warning(f"Failed to list git branches: {result.stderr}")
+                    logger.warning(f"Failed to checkout logging branch: {result.stderr}")
                     return []
                 
-                # Parse branch names
-                branches = []
-                for line in result.stdout.split('\n'):
-                    line = line.strip()
-                    if 'logging-' in line:
-                        # Remove asterisk and whitespace, handle remote branches
-                        branch_name = line.replace('*', '').strip()
-                        if branch_name.startswith('remotes/origin/'):
-                            branch_name = branch_name.replace('remotes/origin/', '')
-                        if branch_name.startswith('logging-'):
-                            branches.append(branch_name)
+                # Read session log from the logging branch
+                log_file_path = os.path.join(logs_path, 'session_log.json')
+                if os.path.exists(log_file_path):
+                    with open(log_file_path, 'r', encoding='utf-8') as f:
+                        logs_data = json.load(f)
+                        # Return all sessions from the consolidated log
+                        return logs_data.get('sessions', [])
                 
-                # Remove duplicates
-                branches = list(set(branches))
-                
-                # Get current branch to restore later
-                current_branch_result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
-                current_branch = current_branch_result.stdout.strip() if current_branch_result.returncode == 0 else None
-                
-                # Check each logging branch for session logs
-                for branch_name in branches:
-                    try:
-                        # Checkout the branch
-                        kwargs = self._get_subprocess_kwargs()
-                        kwargs["timeout"] = 10
-                        result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
-                        
-                        if result.returncode != 0:
-                            logger.warning(f"Failed to checkout branch {branch_name}: {result.stderr}")
-                            continue
-                        
-                        # Read session log from this branch
-                        log_file_path = os.path.join(logs_path, 'session_log.json')
-                        if os.path.exists(log_file_path):
-                            with open(log_file_path, 'r', encoding='utf-8') as f:
-                                session_data = json.load(f)
-                                session_data['branch_name'] = branch_name
-                                all_sessions.append(session_data)
-                    
-                    except (json.JSONDecodeError, FileNotFoundError, PermissionError) as e:
-                        logger.info(f"Could not read session log from branch {branch_name}: {e}")
-                        continue
-                
-                # Restore original branch
-                if current_branch:
-                    subprocess.run(['git', 'checkout', current_branch], **kwargs)
+                return []
                 
             finally:
                 os.chdir(original_cwd)
-            
-            # Sort by session start time
-            all_sessions.sort(key=lambda x: x.get('session_start_time', ''))
-            
-            return all_sessions
             
         except Exception as e:
             logger.info(f"Error reading all session logs: {str(e)}")
