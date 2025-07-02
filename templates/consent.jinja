@@ -105,7 +105,7 @@
         <li>The online study will last approximately {{ duration }}.</li>
         <li>We will record personal demographics ({{ personal_data }}).</li>
         {% if consent_data.record.screenrecoding %}
-        <li>We will record the screen on your device that are necessary for the study.</li>
+        <li>We will record the screen of the study environment for the duration of the study</li>
         {% endif %}
         {% if consent_data.record.interaction %}
         <li>We will record interaction data (e.g., clicks, timings) during the session.</li>
@@ -125,9 +125,16 @@
     <p>At any time and without giving any reason, you can notify us that you want to withdraw the consent given (GDPR Art. 21). In case of withdrawal, your data stored based on your consent will be deleted or anonymized where this is legally permissible (GDPR Art. 17). If deletion is impossible or only possible with unreasonable technical effort, your data will be anonymized by deleting the personal identification information. However, anonymization of your data cannot entirely exclude the possibility of subsequent tracing of information to you via other sources. Finally, once the data is anonymized, the deletion of the data is not possible anymore as we will not be able to identify which data is yours.</p>
     
     <h2>3. Procedure</h2>
-    <p>After giving consent, you will be guided through the following steps:</p>
+    <p>This is a longitudinal study, and your participation will involve two sessions over the period of one week. 
+    After giving consent, you will be guided through the following steps for the first session:</p>
     <ol>
-        {% for step in procedure_steps %}
+        {% for step in procedure_steps1 %}
+        <li>{{ step }}</li>
+        {% endfor %}
+    </ol>
+    <p>After completing the first session, you will have a break of seven days before the second session begins and you will be guided through the following steps again:</p>
+    <ol>
+        {% for step in procedure_steps2 %}
         <li>{{ step }}</li>
         {% endfor %}
     </ol>
@@ -149,9 +156,9 @@
     </ul>
     <p>If you wish to exercise any of your rights, please contact the researchers.</p>
     
-    <p>Personal data ({{ personal_data }}) will be recorded during participation. The contact details of the study participants can be used to track potential infection chains. Researchers will not identify you by your real name in any reports using settings obtained from this online study, and your confidentiality as a participant in this online study will remain secure. Data collected in this online study will be treated in compliance with the GDPR.</p>
+    <p>Personal data ({{ personal_data }}) will be recorded during participation. Researchers will not identify you by your real name in any reports using settings obtained from this online study, and your confidentiality as a participant in this online study will remain secure. Data collected in this online study will be treated in compliance with the GDPR.</p>
     
-    <p>We will record {% if consent_data.record.demographics %}demographics, {% endif %}{% if consent_data.record.contact %}contact information, {% endif %}{% if consent_data.record.screenrecoding %}the screen and/or activities on your device, {% endif %}{% if consent_data.record.interaction %}your interactions, {% endif %}and browser meta data during the online study. All data you provide in this online study will not be published and kept confidential. This site uses cookies and other tracking technologies to conduct the research, to improve the user experience, the ability to interact with the system and to provide additional content from third parties. Despite careful control of content, the researchers assume no liability for damages, which directly or indirectly result from the use of this online application.</p>
+    <p>We will record {% if consent_data.record.demographics %}demographics, {% endif %}{% if consent_data.record.contact %}contact information, {% endif %}{% if consent_data.record.screenrecoding %}the screen and/or activities on your device, {% endif %}{% if consent_data.record.interaction %}your interactions, {% endif %}and browser meta data during the online study. Any data collected during this study will only be published in anonymized form. This site uses cookies and other tracking technologies to conduct the research, to improve the user experience, the ability to interact with the system and to provide additional content from third parties. Despite careful control of content, the researchers assume no liability for damages, which directly or indirectly result from the use of this online application.</p>
     
     <p>Your non-anonymized data will be stored for {{ storage_time }} from the time your consent is given, unless you withdraw your consent before this period has elapsed. Your non-anonymized data will be stored in a secure location and will be accessible only to the researchers involved in this work.</p>
     

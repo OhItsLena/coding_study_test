@@ -2,7 +2,7 @@
     "version": "0.2.2",
     "versionData": "0.3",
     "title": "Coding with AI: Exploring New Paradigms",
-    "duration": "120 minutes",
+    "duration": "2 x 60 minutes",
     "personalData": "age and gender",
     "storageTime": "5 years",
     "purpose": "The purpose is to sample results and feedback from coding with different levels of AI support.",
@@ -27,7 +27,8 @@
         "notes": false,
         "interaction": true
     },
-    "procedure": "1. Establishing a connection to a development environment within a virtual machine via a RDP connection.\n2. Answering a background questionnaire\n3. Working on a coding task using the provided level of AI support\n4. Proving insights about the development experience during the task",
+    "procedure1": "1. Establishing a connection to a development environment within a virtual machine via a RDP connection.\n2. Answering a background questionnaire\n3. Working on a coding task using the provided level of AI support\n4. Proving insights about the development experience during the task",
+    "procedure2": "1. Establishing a connection to a development environment within a virtual machine via a RDP connection.\n2. Working on a coding task using the provided level of AI support\n3. Proving insights about the development experience during the task",
     "institution": "LMU Munich",
     "type": "online study",
     "share": "no",
