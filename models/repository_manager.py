@@ -566,12 +566,7 @@ class RepositoryManager:
             True if successful, False otherwise
         """
         try:
-            # Set up authenticated remote URL
-            if repo_type == "tutorial":
-                repo_name = f"tutorial-{participant_id}"
-            else:  # study
-                repo_name = f"study-{participant_id}"
-            
+            repo_name = f"study-{participant_id}"
             authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
             
             kwargs = self._get_subprocess_kwargs()
