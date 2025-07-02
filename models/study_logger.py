@@ -27,8 +27,118 @@ import signal
 import time
 import logging
 import random
+
+import os
+import sys
+import time
+import json
+import threading
+import platform
+import subprocess
+import shutil
+import random
+import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
+class FocusTracker:
+    """
+    Cross-platform window focus tracker for study participants.
+    Logs application/window focus changes to a JSON file.
+    """
+    def __init__(self, logs_directory: str, poll_interval: float = 1.0):
+        self.logs_directory = logs_directory
+        self.poll_interval = poll_interval
+        self.focus_log_path = os.path.join(logs_directory, "focus_log.json")
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._last_focus = None
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._track_focus_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=2)
+
+    def _track_focus_loop(self):
+        while not self._stop_event.is_set():
+            focus_info = self._get_active_window_info()
+            if focus_info and focus_info != self._last_focus:
+                self._log_focus_event(focus_info)
+                self._last_focus = focus_info
+            time.sleep(self.poll_interval)
+
+    def _get_active_window_info(self) -> Optional[Dict[str, str]]:
+        system = platform.system()
+        try:
+            if system == "Darwin":
+                # macOS: Use osascript to get frontmost app and window title
+                script = 'tell application "System Events"\nset frontApp to name of first application process whose frontmost is true\nend tell\nreturn frontApp'
+                app_proc = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+                app_name = app_proc.stdout.strip() if app_proc.returncode == 0 else None
+                # Window title (optional, may require accessibility permissions)
+                title_script = 'tell application "System Events"\nset frontApp to first application process whose frontmost is true\ntry\nset window_name to name of front window of frontApp\non error\nset window_name to ""\nend try\nend tell\nreturn window_name'
+                title_proc = subprocess.run(["osascript", "-e", title_script], capture_output=True, text=True)
+                window_title = title_proc.stdout.strip() if title_proc.returncode == 0 else ""
+                if app_name:
+                    return {"application": app_name, "window_title": window_title}
+            elif system == "Windows":
+                try:
+                    import win32gui
+                    import win32process
+                    import psutil
+                    hwnd = win32gui.GetForegroundWindow()
+                    window_title = win32gui.GetWindowText(hwnd)
+                    _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                    proc = psutil.Process(pid)
+                    app_name = proc.name()
+                    return {"application": app_name, "window_title": window_title}
+                except ImportError:
+                    return None
+            elif system == "Linux":
+                # Linux: Use xdotool (must be installed)
+                try:
+                    win_id = subprocess.check_output(["xdotool", "getactivewindow"], text=True).strip()
+                    window_title = subprocess.check_output(["xdotool", "getwindowname", win_id], text=True).strip()
+                    # Try to get process name (optional, may require xprop)
+                    app_name = ""
+                    try:
+                        wm_class = subprocess.check_output(["xprop", "-id", win_id, "WM_CLASS"], text=True)
+                        if 'WM_CLASS' in wm_class:
+                            app_name = wm_class.split('=')[-1].strip().strip('"')
+                    except Exception:
+                        pass
+                    return {"application": app_name, "window_title": window_title}
+                except Exception:
+                    return None
+        except Exception:
+            return None
+        return None
+
+    def _log_focus_event(self, focus_info: Dict[str, str]):
+        event = {
+            "timestamp": datetime.now().isoformat(),
+            "application": focus_info.get("application", ""),
+            "window_title": focus_info.get("window_title", "")
+        }
+        try:
+            if not os.path.exists(self.logs_directory):
+                os.makedirs(self.logs_directory, exist_ok=True)
+            if os.path.exists(self.focus_log_path):
+                with open(self.focus_log_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = {"focus_events": []}
+            data["focus_events"].append(event)
+            with open(self.focus_log_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"Failed to log focus event: {e}")
 
 from .github_service import GitHubService
 
@@ -651,6 +761,24 @@ class StudyLogger:
         self.screen_recorder = ScreenRecorder()
         # Generate unique session ID for this app run
         self.session_id = self._generate_session_id()
+        self.focus_tracker = None
+        
+    def start_focus_tracking(self, participant_id: str, development_mode: bool):
+        """
+        Start background window focus tracking for the participant.
+        """
+        logs_directory = self.get_logs_directory_path(participant_id, development_mode)
+        if not self.focus_tracker:
+            self.focus_tracker = FocusTracker(logs_directory)
+        self.focus_tracker.start()
+
+    def stop_focus_tracking(self):
+        """
+        Stop background window focus tracking.
+        """
+        if self.focus_tracker:
+            self.focus_tracker.stop()
+            self.focus_tracker = None
     
     def _generate_session_id(self) -> str:
         """
@@ -684,31 +812,33 @@ class StudyLogger:
     
     def start_session_recording(self, participant_id: str, study_stage: int, development_mode: bool) -> bool:
         """
-        Start screen recording for the study session.
+        Start screen recording and focus tracking for the study session.
         
         Args:
             participant_id: The participant's unique identifier
             study_stage: The current study stage (1 or 2)
             development_mode: Whether running in development mode
-            
         Returns:
             True if recording started successfully, False otherwise
         """
-        # Skip screen recording in development mode
+        # Skip screen recording and focus tracking in development mode
         if development_mode:
-            logger.info("Screen recording disabled in development mode")
+            logger.info("Screen recording and focus tracking disabled in development mode")
             return True
-            
         logs_directory = self.get_logs_directory_path(participant_id, development_mode)
+        # Start focus tracking
+        self.start_focus_tracking(participant_id, development_mode)
+        # Start screen recording
         return self.screen_recorder.start_recording(participant_id, study_stage, logs_directory)
     
     def stop_session_recording(self) -> bool:
         """
-        Stop the current session recording.
+        Stop the current session recording and focus tracking.
         
         Returns:
             True if recording stopped successfully, False otherwise
         """
+        self.stop_focus_tracking()
         return self.screen_recorder.stop_recording()
     
     def is_recording_active(self) -> bool:
@@ -1127,22 +1257,19 @@ class StudyLogger:
             with open(log_file_path, 'w', encoding='utf-8') as f:
                 json.dump(logs_data, f, indent=2, ensure_ascii=False)
             
-            # Commit the log entry
+            # Commit and push all files in the logs directory (including focus_log.json)
             kwargs = self._get_subprocess_kwargs()
-            kwargs["timeout"] = 5
-            subprocess.run(['git', 'add', self.get_session_log_filename()], **kwargs)
-            
-            commit_message = f"Log route visit: {route_name} (stage {study_stage}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
             kwargs["timeout"] = 10
+            subprocess.run(['git', 'add', '.'], **kwargs)
+
+            commit_message = f"Log route visit: {route_name} (stage {study_stage}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
             result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
-            
+
             if result.returncode == 0:
                 logger.info(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}")
-                
                 # Push to remote if token is available
                 if github_token and github_org:
                     self.push_logs_to_remote(participant_id, development_mode, github_token, github_org)
-                
                 return True
             else:
                 logger.warning(f"Failed to commit log entry. Error: {result.stderr}")
