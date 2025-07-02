@@ -985,28 +985,6 @@ class StudyLogger:
         """
         return "session_log.json"
     
-    def get_logs_directory_path(self, participant_id: str, development_mode: bool) -> str:
-        """
-        Get the appropriate logs directory path based on development mode.
-        
-        Args:
-            participant_id: The participant's unique identifier
-            development_mode: Whether running in development mode
-            
-        Returns:
-            Path to the logs directory
-        """
-        # Get the directory where the app is located
-        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
-        # Create logs directory using participant ID
-        logs_dir = os.path.join(app_dir, f'logs-{participant_id}')
-        
-        # Create directory if it doesn't exist
-        os.makedirs(logs_dir, exist_ok=True)
-        
-        return logs_dir
-    
     def start_session_recording(self, participant_id: str, study_stage: int, development_mode: bool) -> bool:
         """
         Start screen recording for the study session.
