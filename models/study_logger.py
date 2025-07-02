@@ -68,10 +68,16 @@ class FocusTracker:
     def _track_focus_loop(self):
         while not self._stop_event.is_set():
             focus_info = self._get_active_window_info()
-            if focus_info and focus_info != self._last_focus:
-                self._log_focus_event(focus_info)
-                self._last_focus = focus_info
+            # Only log if changed compared to last value
+            if focus_info is not None:
+                if not self._last_focus or not self._focus_equal(focus_info, self._last_focus):
+                    self._log_focus_event(focus_info)
+                    self._last_focus = focus_info
             time.sleep(self.poll_interval)
+
+    def _focus_equal(self, a: dict, b: dict) -> bool:
+        # Compare application and window_title for equality
+        return a.get("application") == b.get("application") and a.get("window_title") == b.get("window_title")
 
     def _get_active_window_info(self) -> Optional[Dict[str, str]]:
         system = platform.system()
@@ -762,7 +768,7 @@ class StudyLogger:
         # Generate unique session ID for this app run
         self.session_id = self._generate_session_id()
         self.focus_tracker = None
-        
+
     def start_focus_tracking(self, participant_id: str, development_mode: bool):
         """
         Start background window focus tracking for the participant.
