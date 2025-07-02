@@ -293,9 +293,9 @@ h1 {
     <div id="subtle-stopwatch" class="subtle-stopwatch">
         <span id="elapsed-time">40:00</span>
     </div>
-    {% if stage == 1%}
+    {% if study_stage == 1 %}
     <p>Using the AI coding techniques you just learned your task is now to implement a simple web-based <strong>PDF Merger Tool</strong> for personal use. </p>
-    {% else %}
+    {% elif study_stage == 2 %}
     <p>Building on your work from the last stage your task is now to implement <strong>additional features</strong> for your web-based <strong>PDF Merger Tool</strong>.
     Your code has been restored for you and you can continue working on it.</p>
     {% endif %}
