@@ -242,22 +242,23 @@ def debug_session():
 def consent():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
-    
-    # Check for automatic rerouting based on session history
-    reroute = check_automatic_rerouting('consent', participant_id, study_stage, DEVELOPMENT_MODE)
-    if reroute:
-        return reroute
-    
+
+    # Only check for automatic rerouting if consent has already been given
+    if session.get('consent_given'):
+        reroute = check_automatic_rerouting('consent', participant_id, study_stage, DEVELOPMENT_MODE)
+        if reroute:
+            return reroute
+
     # Stage 2 participants should skip consent and go directly to welcome back screen
     if study_stage == 2:
         return redirect(url_for('welcome_back'))
-    
+
     if request.method == 'POST':
         # Check if consent was given
         if request.form.get('consent'):
             # Mark consent as given in session
             session['consent_given'] = True
-            
+
             # Log route visit
             log_route_visit(
                 participant_id=participant_id,
@@ -269,12 +270,12 @@ def consent():
                 github_org=GITHUB_ORG,
                 async_mode=ASYNC_GITHUB_MODE
             )
-            
+
             return redirect(url_for('background_questionnaire'))
         else:
             # If consent not given, redirect back to consent form
             return redirect(url_for('consent'))
-    
+
     # Load consent data from JSON
     consent_data = {}
     try:
@@ -283,7 +284,7 @@ def consent():
     except FileNotFoundError:
         logger.warning("exportInformedConsent.json not found")
         consent_data = {}
-    
+
     # Log route visit if this is the first time
     if should_log_route(session, 'consent', study_stage):
         log_route_visit(
@@ -297,7 +298,7 @@ def consent():
             async_mode=ASYNC_GITHUB_MODE
         )
         mark_route_as_logged(session, 'consent', study_stage)
-    
+
     # Parse procedure steps
     procedure_steps1 = []
     if consent_data.get('procedure1'):
@@ -319,7 +320,7 @@ def consent():
                 # Remove the number and period, keep the text
                 step_text = line.split('.', 1)[1].strip() if '.' in line else line
                 procedure_steps2.append(step_text)
-    
+
     # Prepare researcher names for display
     researchers_names = ""
     if consent_data.get('researchers'):
@@ -328,7 +329,7 @@ def consent():
             researchers_names = ', '.join(names[:-1]) + ', and ' + names[-1]
         elif names:
             researchers_names = names[0]
-    
+
     return render_template('consent.jinja',
                          participant_id=participant_id,
                          study_stage=study_stage,
