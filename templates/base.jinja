@@ -77,8 +77,7 @@
             justify-content: center;
             margin-top: 30px;
         }
-        
-        /* Footer styles */
+         /* Footer styles */
         .footer {
             margin-top: 50px;
             padding-top: 20px;
@@ -88,15 +87,177 @@
             text-align: center;
         }
         
+        /* Loading overlay styles */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .loading-content {
+            text-align: center;
+            color: #333;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #00883A;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+        
+        .loading-subtext {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        /* Show loading state when active */
+        .loading-overlay.active {
+            display: flex;
+        }
+
         {% block additional_styles %}{% endblock %}
     </style>
 </head>
 <body>
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Processing...</div>
+            <div class="loading-subtext">Please wait while we prepare your next step</div>
+        </div>
+    </div>
+
     {% block content %}{% endblock %}
     
     <div class="footer">
         2025 LMU Coding with AI Study.<br>
         If you have any questions or run into technical issues, please contact the study coordination team.
     </div>
+    
+    <script>
+        // Loading animation functionality
+        function showLoading(message = 'Processing...', subMessage = 'Please wait while we prepare your next step') {
+            const overlay = document.getElementById('loadingOverlay');
+            const textElement = overlay.querySelector('.loading-text');
+            const subtextElement = overlay.querySelector('.loading-subtext');
+            
+            textElement.textContent = message;
+            subtextElement.textContent = subMessage;
+            overlay.classList.add('active');
+        }
+        
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('active');
+        }
+        
+        // Automatically show loading for navigation
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle form submissions
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    // Don't show loading for certain forms (like AJAX forms)
+                    if (this.classList.contains('no-loading')) {
+                        return;
+                    }
+                    
+                    // Determine the loading message based on the form
+                    let message = 'Processing...';
+                    let subMessage = 'Please wait while we prepare your next step';
+                    
+                    if (this.action.includes('consent')) {
+                        message = 'Setting up your session...';
+                        subMessage = 'Preparing study environment and logging system';
+                    } else if (this.action.includes('complete-task')) {
+                        message = 'Saving your progress...';
+                        subMessage = 'Committing your code changes and updating status';
+                    } else if (this.action.includes('timer-expired')) {
+                        message = 'Finalizing session...';
+                        subMessage = 'Saving your final code changes';
+                    }
+                    
+                    showLoading(message, subMessage);
+                });
+            });
+            
+            // Handle navigation links
+            const navLinks = document.querySelectorAll('a:not([href^="#"]):not([href^="http"]):not(.no-loading)');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    // Skip if it's an external link or has no-loading class
+                    if (this.hostname && this.hostname !== location.hostname) {
+                        return;
+                    }
+                    if (this.classList.contains('no-loading')) {
+                        return;
+                    }
+                    
+                    // Determine loading message based on the link
+                    let message = 'Loading...';
+                    let subMessage = 'Please wait while we prepare your next step';
+                    
+                    if (this.href.includes('/consent')) {
+                        message = 'Loading consent form...';
+                        subMessage = 'Preparing study information and consent details';
+                    } else if (this.href.includes('/background-questionnaire')) {
+                        message = 'Setting up questionnaire...';
+                        subMessage = 'Initializing survey and participant data';
+                    } else if (this.href.includes('/tutorial')) {
+                        message = 'Preparing tutorial...';
+                        subMessage = 'Setting up development environment and tutorial materials';
+                    } else if (this.href.includes('/task')) {
+                        message = 'Loading coding environment...';
+                        subMessage = 'Preparing VS Code workspace and task requirements';
+                    } else if (this.href.includes('/ux-questionnaire')) {
+                        message = 'Finalizing session...';
+                        subMessage = 'Saving workspace data and preparing survey';
+                    } else if (this.href.includes('/welcome-back')) {
+                        message = 'Welcome back!';
+                        subMessage = 'Preparing your Stage 2 session environment';
+                    } else if (this.href.includes('/goodbye')) {
+                        message = 'Completing study...';
+                        subMessage = 'Finalizing data collection and preparing completion';
+                    }
+                    
+                    showLoading(message, subMessage);
+                });
+            });
+            
+            // Hide loading on page load (in case of back button or refresh)
+            hideLoading();
+        });
+        
+        // Hide loading if page becomes visible again (e.g., from browser back button)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                hideLoading();
+            }
+        });
+        
+        {% block additional_scripts %}{% endblock %}
+    </script>
 </body>
 </html>
