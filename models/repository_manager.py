@@ -113,11 +113,7 @@ class RepositoryManager:
             True if successful, False otherwise
         """
         repo_path = self.get_repository_path(participant_id, development_mode, repo_type)
-        
-        if repo_type == "tutorial":
-            repo_name = f"tutorial-{participant_id}"
-        else:  # study
-            repo_name = f"study-{participant_id}"
+        repo_name = f"study-{participant_id}"
         
         # Get authenticated repository URL
         repo_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
