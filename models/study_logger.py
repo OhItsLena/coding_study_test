@@ -430,10 +430,12 @@ class ScreenRecorder:
             final_file_location = moved_file_path or "default OBS location"
             logger.info(f"OBS screen recording stopped successfully. File location: {final_file_location}")
             
-            # Reset the recording state
+            # Reset the recording state but preserve file path for Azure upload
             self.recording_process = None
-            recording_file = self.recording_file_path
-            self.recording_file_path = None
+            # Keep the file path available for Azure upload - update it if file was moved
+            if moved_file_path:
+                self.recording_file_path = moved_file_path
+            # Don't reset recording_file_path to None here - let Azure upload handle cleanup
             self.recording_start_time = None
             
             return True
@@ -618,6 +620,8 @@ class ScreenRecorder:
         
         if success:
             logger.info(f"Recording for participant {participant_id}, stage {study_stage} uploaded to Azure")
+            # Clear the stored file path after successful upload
+            self.recording_file_path = None
             # Optionally remove local file after successful upload
             # Uncomment the following lines if you want to delete local files after upload:
             # try:
@@ -625,6 +629,8 @@ class ScreenRecorder:
             #     logger.info(f"🗑️  Local recording file removed: {file_to_upload}")
             # except Exception as e:
             #     logger.warning(f" Could not remove local file: {e}")
+        else:
+            logger.error(f"Failed to upload recording for participant {participant_id}, stage {study_stage}")
         
         return success
         
