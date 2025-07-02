@@ -69,13 +69,14 @@ class RepositoryManager:
         
         return kwargs
     
-    def get_repository_path(self, participant_id: str, development_mode: bool) -> str:
+    def get_repository_path(self, participant_id: str, development_mode: bool, repo_type: str = "study") -> str:
         """
         Get the path to the participant's repository.
         
         Args:
             participant_id: The participant's unique identifier
             development_mode: Whether running in development mode
+            repo_type: Type of repository ("study" or "tutorial")
         
         Returns:
             The absolute path to the repository
@@ -83,18 +84,20 @@ class RepositoryManager:
         if development_mode:
             current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             workspace_path = current_dir
-            repo_name = f"study-{participant_id}"
-            repo_path = os.path.join(workspace_path, repo_name)
         else:
             home_dir = os.path.expanduser("~")
             workspace_path = os.path.join(home_dir, "workspace")
-            repo_name = f"study-{participant_id}"
-            repo_path = os.path.join(workspace_path, repo_name)
         
+        if repo_type == "tutorial":
+            repo_name = f"tutorial-{participant_id}"
+        else:  # study
+            repo_name = f"study-{participant_id}"
+        
+        repo_path = os.path.join(workspace_path, repo_name)
         return os.path.normpath(repo_path)
     
     def check_and_clone_repository(self, participant_id: str, development_mode: bool, 
-                                 github_token: Optional[str], github_org: str) -> bool:
+                                 github_token: Optional[str], github_org: str, repo_type: str = "study") -> bool:
         """
         Check if the GitHub repository for the participant exists in the workspace directory.
         If not, clone it to that location.
@@ -104,26 +107,26 @@ class RepositoryManager:
             development_mode: Whether running in development mode
             github_token: GitHub personal access token (optional)
             github_org: GitHub organization name
+            repo_type: Type of repository ("study" or "tutorial")
         
         Returns:
             True if successful, False otherwise
         """
-        if development_mode:
-            # In development mode, use current directory
-            current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            workspace_path = current_dir
+        repo_path = self.get_repository_path(participant_id, development_mode, repo_type)
+        
+        if repo_type == "tutorial":
+            repo_name = f"tutorial-{participant_id}"
+        else:  # study
             repo_name = f"study-{participant_id}"
-            repo_path = os.path.join(workspace_path, repo_name)
-            logger.info(f"Development mode: Using local directory for repository: {repo_path}")
-        else:
-            # Use user's home directory with a workspace folder
-            home_dir = os.path.expanduser("~")
-            workspace_path = os.path.join(home_dir, "workspace")
-            repo_name = f"study-{participant_id}"
-            repo_path = os.path.join(workspace_path, repo_name)
         
         # Get authenticated repository URL
         repo_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
+        
+        if development_mode:
+            logger.info(f"Development mode: Using local directory for repository: {repo_path}")
+        
+        # Get workspace path for directory creation
+        workspace_path = os.path.dirname(repo_path)
         
         # Normalize paths for Windows
         workspace_path = os.path.normpath(workspace_path)
@@ -403,7 +406,7 @@ class RepositoryManager:
         Returns:
             True if successful, False otherwise
         """
-        repo_path = self.get_repository_path(participant_id, development_mode)
+        repo_path = self.get_repository_path(participant_id, development_mode, "study")
         
         if not os.path.exists(repo_path):
             logger.info(f"Repository does not exist at: {repo_path}")
@@ -422,11 +425,11 @@ class RepositoryManager:
     
     def commit_and_backup_all(self, participant_id: str, study_stage: Optional[int], commit_message: str,
                              development_mode: bool, github_token: Optional[str], 
-                             github_org: str) -> bool:
+                             github_org: str, repo_type: str = "study") -> bool:
         """
         Unified method to commit changes on current branch and backup all branches.
         This is the main method called when requirements are completed or timer expires.
-        Can also be used for tutorial completion by passing study_stage=None.
+        Can also be used for tutorial completion by passing study_stage=None and repo_type="tutorial".
         Thread-safe with repository-level locking.
         
         Args:
@@ -436,11 +439,12 @@ class RepositoryManager:
             development_mode: Whether running in development mode
             github_token: GitHub personal access token (optional)
             github_org: GitHub organization name
+            repo_type: Type of repository ("study" or "tutorial")
         
         Returns:
             True if successful, False otherwise
         """
-        repo_path = self.get_repository_path(participant_id, development_mode)
+        repo_path = self.get_repository_path(participant_id, development_mode, repo_type)
         
         # Get repository-specific lock to prevent concurrent access
         repo_lock = self._get_repo_lock(repo_path)
@@ -476,7 +480,7 @@ class RepositoryManager:
                 
                 # Step 2: Push all branches to remote as backup (if we have authentication)
                 if github_token:
-                    success = self._push_all_branches_backup(participant_id, github_token, github_org)
+                    success = self._push_all_branches_backup(participant_id, github_token, github_org, repo_type)
                     if not success:
                         logger.info("Warning: Failed to backup all branches to remote")
                         # Don't return False here - local commit succeeded
@@ -552,7 +556,7 @@ class RepositoryManager:
             logger.info(f"Error committing current branch changes: {str(e)}")
             return False
     
-    def _push_all_branches_backup(self, participant_id: str, github_token: str, github_org: str) -> bool:
+    def _push_all_branches_backup(self, participant_id: str, github_token: str, github_org: str, repo_type: str = "study") -> bool:
         """
         Push all local branches to remote as backup.
         
@@ -560,13 +564,18 @@ class RepositoryManager:
             participant_id: The participant's unique identifier
             github_token: GitHub personal access token
             github_org: GitHub organization name
+            repo_type: Type of repository ("study" or "tutorial")
         
         Returns:
             True if successful, False otherwise
         """
         try:
             # Set up authenticated remote URL
-            repo_name = f"study-{participant_id}"
+            if repo_type == "tutorial":
+                repo_name = f"tutorial-{participant_id}"
+            else:  # study
+                repo_name = f"study-{participant_id}"
+            
             authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
             
             kwargs = self._get_subprocess_kwargs()
@@ -652,10 +661,11 @@ class RepositoryManager:
         """
         return self.ensure_branch(repo_path=repo_path, branch_name="tutorial")
 
-    def setup_tutorial_branch(self, participant_id: str, development_mode: bool,
-                             github_token: str, github_org: str) -> bool:
+    def setup_tutorial_repository(self, participant_id: str, development_mode: bool,
+                                 github_token: str, github_org: str) -> bool:
         """
-        Set up tutorial branch for participant using simplified approach.
+        Set up tutorial repository in a separate directory.
+        Clones the tutorial repository to tutorial-{participant_id} directory.
         
         Args:
             participant_id: The participant ID
@@ -667,35 +677,37 @@ class RepositoryManager:
             bool: Success status
         """
         try:
-            repo_path = self.get_repository_path(participant_id, development_mode)
+            # Clone tutorial repository to separate directory
+            success = self.check_and_clone_repository(
+                participant_id, development_mode, github_token, github_org, "tutorial"
+            )
+            if not success:
+                logger.warning(f"Failed to clone tutorial repository")
+                return False
             
-            # Ensure repository exists first
-            if not os.path.exists(repo_path):
-                success = self.check_and_clone_repository(
-                    participant_id, development_mode, github_token, github_org
-                )
-                if not success:
-                    logger.warning(f"Failed to clone repository for tutorial setup")
-                    return False
+            # Get tutorial repository path
+            tutorial_repo_path = self.get_repository_path(participant_id, development_mode, "tutorial")
             
             # Ensure git config is set up
-            if not self.ensure_git_config(repo_path, participant_id):
+            if not self.ensure_git_config(tutorial_repo_path, participant_id):
                 logger.warning(f"Failed to set up git config for tutorial")
                 return False
             
-            # Use the simplified tutorial branch method
-            return self.ensure_tutorial_branch(repo_path)
+            # Ensure we're on the tutorial branch (if it exists)
+            self.ensure_tutorial_branch(tutorial_repo_path)
+            
+            logger.info(f"Tutorial repository successfully set up at: {tutorial_repo_path}")
+            return True
             
         except Exception as e:
-            logger.info(f"Error setting up tutorial branch: {str(e)}")
+            logger.info(f"Error setting up tutorial repository: {str(e)}")
             return False
 
-    def push_tutorial_code(self, participant_id: str, development_mode: bool,
-                          github_token: str, github_org: str) -> bool:
+    def commit_tutorial_completion(self, participant_id: str, development_mode: bool,
+                                 github_token: str, github_org: str) -> bool:
         """
-        Push tutorial code to remote tutorial branch.
-        Uses the same unified workflow as commit_and_backup_all but ensures we're on tutorial branch.
-        Thread-safe with repository-level locking.
+        Commit tutorial completion to the tutorial repository.
+        Uses the unified commit and backup workflow for the tutorial repository.
         
         Args:
             participant_id: The participant ID
@@ -707,92 +719,21 @@ class RepositoryManager:
             bool: Success status
         """
         try:
-            repo_path = self.get_repository_path(participant_id, development_mode)
+            commit_message = f"Tutorial completion - {participant_id}"
             
-            if not os.path.exists(repo_path):
-                logger.info(f"Repository does not exist for tutorial push: {repo_path}")
-                return False
+            # Use the unified commit and backup method for tutorial repository
+            return self.commit_and_backup_all(
+                participant_id=participant_id,
+                study_stage=None,  # None indicates tutorial
+                commit_message=commit_message,
+                development_mode=development_mode,
+                github_token=github_token,
+                github_org=github_org,
+                repo_type="tutorial"
+            )
             
-            # Get repository-specific lock to prevent concurrent access
-            repo_lock = self._get_repo_lock(repo_path)
-            
-            with repo_lock:
-                original_cwd = os.getcwd()
-                
-                try:
-                    # Check if it's a valid git repository
-                    git_dir = os.path.join(repo_path, '.git')
-                    if not os.path.exists(git_dir):
-                        logger.info(f"Not a valid git repository: {repo_path}")
-                        return False
-                    
-                    # Ensure git config is set up
-                    self.ensure_git_config(repo_path, participant_id)
-                    
-                    # Change to repository directory
-                    os.chdir(repo_path)
-                    
-                    logger.info(f"Pushing tutorial code for {participant_id} (locked)")
-                    
-                    # Make sure we're on the tutorial branch
-                    kwargs = self._get_subprocess_kwargs()
-                    kwargs['timeout'] = 10
-                    
-                    result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
-                    if result.returncode != 0:
-                        logger.warning(f"Failed to check current branch: {result.stderr}")
-                        return False
-                        
-                    current_branch = result.stdout.strip()
-                    if current_branch != 'tutorial':
-                        # Switch to tutorial branch
-                        result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
-                        if result.returncode != 0:
-                            logger.warning(f"Failed to switch to tutorial branch: {result.stderr}")
-                            return False
-                    
-                    # Sync with remote tutorial branch if it exists
-                    result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
-                    if result.returncode != 0:
-                        logger.warning(f"Failed to fetch from remote: {result.stderr}")
-                    
-                    result = subprocess.run(['git', 'branch', '-r', '--list', 'origin/tutorial'], **kwargs)
-                    if result.stdout.strip():
-                        # Remote tutorial branch exists, pull updates
-                        result = subprocess.run(['git', 'pull', 'origin', 'tutorial'], **kwargs)
-                        if result.returncode != 0:
-                            logger.warning(f"Failed to pull tutorial updates: {result.stderr}")
-                    
-                    # Step 1: Commit any changes on the current branch
-                    commit_message = f"Tutorial completion - {participant_id}"
-                    success = self._commit_current_branch_changes(None, commit_message)  # None = tutorial stage
-                    if not success:
-                        logger.info("Failed to commit changes on tutorial branch")
-                        return False
-                    
-                    # Step 2: Push all branches to remote as backup (if we have authentication)
-                    if github_token:
-                        success = self._push_all_branches_backup(participant_id, github_token, github_org)
-                        if not success:
-                            logger.info("Warning: Failed to backup all branches to remote")
-                            # Don't return False here - local commit succeeded
-                    else:
-                        logger.info("No GitHub token provided - changes committed locally only")
-                    
-                    logger.info(f"Successfully completed tutorial push workflow for {participant_id}")
-                    return True
-                    
-                except Exception as e:
-                    logger.info(f"Error in tutorial push workflow: {str(e)}")
-                    return False
-                finally:
-                    try:
-                        os.chdir(original_cwd)
-                    except Exception as e:
-                        logger.warning(f"Failed to restore original working directory: {str(e)}")
-                
         except Exception as e:
-            logger.info(f"Error pushing tutorial code: {str(e)}")
+            logger.info(f"Error committing tutorial completion: {str(e)}")
             return False
     
 
@@ -831,7 +772,7 @@ class VSCodeManager:
         return kwargs
     
     def open_vscode_with_repository(self, participant_id: str, development_mode: bool,
-                                  study_stage: Optional[int] = None) -> bool:
+                                  study_stage: Optional[int] = None, repo_type: str = "study") -> bool:
         """
         Open VS Code with the participant's cloned repository.
         If study_stage is provided, ensures the correct branch is active before opening.
@@ -839,13 +780,14 @@ class VSCodeManager:
         Args:
             participant_id: The participant's unique identifier
             development_mode: Whether running in development mode
-            study_stage: Study stage to ensure correct branch (optional)
+            study_stage: Study stage to ensure correct branch (optional, only for study repos)
+            repo_type: Type of repository ("study" or "tutorial")
         
         Returns:
             True if successful, False otherwise
         """
         # Get the repository path
-        repo_path = self.repository_manager.get_repository_path(participant_id, development_mode)
+        repo_path = self.repository_manager.get_repository_path(participant_id, development_mode, repo_type)
         
         # Normalize path
         repo_path = os.path.normpath(repo_path)
@@ -856,8 +798,8 @@ class VSCodeManager:
                 logger.info(f"Repository does not exist at: {repo_path}")
                 return False
             
-            # If study_stage is provided, ensure the correct branch is active (skip backup for VS Code opening)
-            if study_stage is not None:
+            # If study_stage is provided and it's a study repo, ensure the correct branch is active
+            if study_stage is not None and repo_type == "study":
                 if not self.repository_manager.ensure_stage_branch(repo_path, study_stage, skip_backup=True):
                     logger.warning(f"Failed to ensure correct branch for stage {study_stage}")
             
@@ -906,7 +848,7 @@ class VSCodeManager:
 
     def open_vscode_with_tutorial(self, participant_id: str, development_mode: bool) -> bool:
         """
-        Open VS Code with the participant's repository on the tutorial branch.
+        Open VS Code with the participant's tutorial repository.
         
         Args:
             participant_id: The participant's unique identifier
@@ -915,88 +857,10 @@ class VSCodeManager:
         Returns:
             True if successful, False otherwise
         """
-        # Get the repository path
-        repo_path = self.repository_manager.get_repository_path(participant_id, development_mode)
-        
-        # Normalize path
-        repo_path = os.path.normpath(repo_path)
-        
-        try:
-            # Check if repository exists
-            if not os.path.exists(repo_path):
-                logger.info(f"Repository does not exist at: {repo_path}")
-                return False
-            
-            # Ensure we're on tutorial branch using simplified method
-            if not self.repository_manager.ensure_tutorial_branch(repo_path):
-                logger.warning(f"Failed to ensure tutorial branch")
-                return False
-            
-            # Double-check that we're actually on the tutorial branch before opening VS Code
-            # This prevents issues if other operations (like logging) switched branches
-            original_cwd = os.getcwd()
-            try:
-                os.chdir(repo_path)
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 5
-                
-                # Verify current branch
-                result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
-                if result.returncode == 0:
-                    current_branch = result.stdout.strip()
-                    if current_branch != 'tutorial':
-                        logger.warning(f"Repository is on '{current_branch}' branch instead of 'tutorial'. Switching to tutorial branch.")
-                        checkout_result = subprocess.run(['git', 'checkout', 'tutorial'], **kwargs)
-                        if checkout_result.returncode != 0:
-                            logger.warning(f"Failed to checkout tutorial branch: {checkout_result.stderr}")
-                            return False
-                        logger.info("Successfully switched to tutorial branch")
-                    else:
-                        logger.info("Confirmed: Repository is on tutorial branch")
-                else:
-                    logger.warning(f"Could not verify current branch: {result.stderr}")
-            finally:
-                os.chdir(original_cwd)
-            
-            # Try to open VS Code with the repository
-            logger.info(f"Opening VS Code with tutorial branch: {repo_path}")
-            
-            # Use 'code' command to open VS Code with the repository folder
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 10
-            result = subprocess.run([
-                'code', repo_path
-            ], **kwargs)
-            
-            if result.returncode == 0:
-                logger.info(f"Successfully opened VS Code with tutorial: {repo_path}")
-                return True
-            else:
-                logger.warning(f"Failed to open VS Code. Error: {result.stderr}")
-                # Try alternative method for macOS
-                try:
-                    kwargs = self._get_subprocess_kwargs()
-                    kwargs['timeout'] = 10
-                    result = subprocess.run([
-                        'open', '-a', 'Visual Studio Code', repo_path
-                    ], **kwargs)
-                    
-                    if result.returncode == 0:
-                        logger.info(f"Successfully opened VS Code with tutorial using 'open' command: {repo_path}")
-                        return True
-                    else:
-                        logger.warning(f"Failed to open VS Code with 'open' command. Error: {result.stderr}")
-                        return False
-                except Exception as e:
-                    logger.info(f"Error trying 'open' command: {str(e)}")
-                    return False
-                
-        except subprocess.TimeoutExpired:
-            logger.info("VS Code open operation timed out")
-            return False
-        except FileNotFoundError:
-            logger.info("VS Code ('code' command) not found in PATH. Please ensure VS Code is installed and the 'code' command is available.")
-            return False
-        except Exception as e:
-            logger.info(f"Error opening VS Code with tutorial: {str(e)}")
-            return False
+        # Use the unified method with tutorial repo type
+        return self.open_vscode_with_repository(
+            participant_id=participant_id,
+            development_mode=development_mode,
+            study_stage=None,
+            repo_type="tutorial"
+        )

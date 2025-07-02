@@ -170,28 +170,30 @@ def open_vscode_with_repository(participant_id, development_mode, study_stage=No
 
 
 # Tutorial Management Functions
-def setup_tutorial_branch(participant_id, development_mode, github_token, github_org):
-    """Set up tutorial branch and open VS Code with tutorial workspace."""
-    return _repository_manager.setup_tutorial_branch(participant_id, development_mode, github_token, github_org)
+def setup_tutorial_repository(participant_id, development_mode, github_token, github_org):
+    """Set up tutorial repository in a separate directory."""
+    return _repository_manager.setup_tutorial_repository(
+        participant_id, development_mode, github_token, github_org
+    )
 
 
-def push_tutorial_code(participant_id, development_mode, github_token, github_org, async_mode=True):
-    """Push tutorial code to the tutorial branch when leaving tutorial."""
+def commit_tutorial_completion(participant_id, development_mode, github_token, github_org, async_mode=True):
+    """Commit tutorial completion to the tutorial repository."""
     if async_mode:
         # Queue the operation for background processing
-        _async_github_service.queue_push_tutorial_code(
+        _async_github_service.queue_commit_tutorial_completion(
             participant_id, development_mode, github_token, github_org
         )
         return True  # Return immediately
     else:
         # Synchronous processing
-        return _repository_manager.push_tutorial_code(
+        return _repository_manager.commit_tutorial_completion(
             participant_id, development_mode, github_token, github_org
         )
 
 
 def open_vscode_with_tutorial(participant_id, development_mode):
-    """Open VS Code with the tutorial branch workspace."""
+    """Open VS Code with the participant's tutorial repository."""
     return _vscode_manager.open_vscode_with_tutorial(participant_id, development_mode)
 
 

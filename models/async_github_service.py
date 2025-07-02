@@ -129,6 +129,8 @@ class AsyncGitHubService:
                 return self._process_save_vscode_workspace_storage(operation)
             elif operation.operation_type == 'push_tutorial_code':
                 return self._process_push_tutorial_code(operation)
+            elif operation.operation_type == 'commit_tutorial_completion':
+                return self._process_commit_tutorial_completion(operation)
             else:
                 logger.error(f"AsyncGitHubService: Unknown operation type: {operation.operation_type}")
                 return False
@@ -225,6 +227,20 @@ class AsyncGitHubService:
         except Exception as e:
             logger.error(f"AsyncGitHubService: Tutorial code push failed: {str(e)}")
             return False
+    
+    def _process_commit_tutorial_completion(self, operation: GitHubOperation) -> bool:
+        """Process tutorial completion commit."""
+        try:
+            if self.repository_manager:
+                return self.repository_manager.commit_tutorial_completion(
+                    participant_id=operation.participant_id,
+                    development_mode=operation.kwargs.get('development_mode'),
+                    github_token=operation.kwargs.get('github_token'),
+                    github_org=operation.kwargs.get('github_org')
+                )
+        except Exception as e:
+            logger.error(f"AsyncGitHubService: Commit tutorial completion failed: {str(e)}")
+            return False
 
     # Public async methods
     def queue_log_route_visit(self, participant_id: str, route_name: str, 
@@ -318,6 +334,19 @@ class AsyncGitHubService:
         )
         self.operation_queue.put(operation)
         logger.info(f"AsyncGitHubService: Queued tutorial code push for {participant_id}")
+    
+    def queue_commit_tutorial_completion(self, participant_id: str, development_mode: bool,
+                                        github_token: Optional[str] = None, github_org: Optional[str] = None):
+        """Queue a tutorial completion commit operation."""
+        operation = GitHubOperation(
+            operation_type='commit_tutorial_completion',
+            participant_id=participant_id,
+            development_mode=development_mode,
+            github_token=github_token,
+            github_org=github_org
+        )
+        self.operation_queue.put(operation)
+        logger.info(f"AsyncGitHubService: Queued tutorial completion commit for {participant_id}")
     
     def get_stats(self) -> Dict[str, Any]:
         """Get current operation statistics."""

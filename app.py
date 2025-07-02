@@ -16,7 +16,7 @@ from services import (
     save_vscode_workspace_storage, save_vscode_workspace_storage_async,
     start_session_recording, stop_session_recording, is_recording_active,
     upload_session_recording_to_azure,
-    setup_tutorial_branch, open_vscode_with_tutorial, push_tutorial_code,
+    setup_tutorial_repository, open_vscode_with_tutorial, commit_tutorial_completion,
     get_session_log_history, determine_correct_route
 )
 
@@ -550,9 +550,9 @@ def tutorial():
         )
         mark_route_as_logged(session, 'tutorial', study_stage)
         
-        # Set up tutorial branch and open VS Code (only on first visit)
-        logger.info(f"Setting up tutorial branch for {participant_id}")
-        tutorial_setup_success = setup_tutorial_branch(
+        # Set up tutorial repository and open VS Code (only on first visit)
+        logger.info(f"Setting up tutorial repository for {participant_id}")
+        tutorial_setup_success = setup_tutorial_repository(
             participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG
         )
         
@@ -678,10 +678,10 @@ def task():
         )
         mark_route_as_logged(session, 'task', study_stage)
         
-    # Push tutorial code when transitioning from tutorial to task (only for stage 1)
+    # Commit tutorial completion when transitioning from tutorial to task (only for stage 1)
     if study_stage == 1:
-        logger.info(f"Pushing tutorial code for {participant_id} before starting coding task")
-        push_tutorial_code(
+        logger.info(f"Committing tutorial completion for {participant_id} before starting coding task")
+        commit_tutorial_completion(
             participant_id, DEVELOPMENT_MODE, GITHUB_TOKEN, GITHUB_ORG, 
             async_mode=ASYNC_GITHUB_MODE
         )
