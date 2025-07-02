@@ -365,15 +365,15 @@ class RepositoryManager:
         branch_name = f"stage-{study_stage}"
         
         if study_stage == 1:
-            # Stage-1: Always create from remote main branch
-            source_branch = "origin/main"
+            # Stage-1: Always create from remote stage-1 branch
+            source_branch = "origin/stage-1"
         elif study_stage == 2:
             # Stage-2: Always create from local stage-1 branch
             source_branch = "stage-1"
         else:
             logger.error(f"Error: Unsupported study stage: {study_stage}")
             return False
-        
+
         return self.ensure_branch(
             repo_path=repo_path,
             branch_name=branch_name,
