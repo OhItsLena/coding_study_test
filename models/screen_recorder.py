@@ -307,10 +307,10 @@ class ScreenRecorder:
         if not self.is_recording():
             logger.info("No OBS screen recording in progress")
             return False
-        
+
         try:
             logger.info("Stopping OBS screen recording...")
-            
+
             system = platform.system()
             # Simple subprocess kwargs for process control
             kwargs = {
@@ -320,12 +320,12 @@ class ScreenRecorder:
             if platform.system() == "Windows":
                 kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
                 kwargs['shell'] = True
-            
+
             if system == "Windows":
                 # On Windows, try to stop recording first using OBS command line, then quit
                 obs_executable = self._get_obs_executable_path()
                 obs_dir = os.path.dirname(obs_executable)
-                
+
                 # If OBS is still running, force close it
                 check_cmd = ['powershell', '-Command', 'Get-Process obs64 -ErrorAction SilentlyContinue']
                 check_result = subprocess.run(check_cmd, **kwargs)
@@ -334,7 +334,18 @@ class ScreenRecorder:
                     force_stop_cmd = ['powershell', '-Command', 
                                     'Get-Process obs64 -ErrorAction SilentlyContinue | Stop-Process -Force']
                     subprocess.run(force_stop_cmd, **kwargs)
-                    
+
+                # Remove OBS safe_mode file to prevent safe mode prompt
+                try:
+                    appdata = os.environ.get('APPDATA')
+                    if appdata:
+                        safe_mode_path = os.path.join(appdata, 'obs-studio', 'safe_mode')
+                        if os.path.exists(safe_mode_path):
+                            os.remove(safe_mode_path)
+                            logger.info(f"Removed OBS safe_mode file: {safe_mode_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove OBS safe_mode file: {e}")
+
             elif system == "Darwin":  # macOS
                 # On macOS, use osascript to quit OBS gracefully or pkill as fallback
                 try:
@@ -347,7 +358,7 @@ class ScreenRecorder:
                 except subprocess.TimeoutExpired:
                     # Force kill if needed
                     subprocess.run(['pkill', '-9', '-f', '/Applications/OBS.app/Contents/MacOS/OBS'], **kwargs)
-                    
+
             else:  # Linux
                 # On Linux, try graceful shutdown then pkill
                 try:
@@ -360,11 +371,11 @@ class ScreenRecorder:
                         subprocess.run(['pkill', '-9', 'obs'], **kwargs)
                 except Exception:
                     pass
-            
+
             # Wait a moment for OBS to fully stop and save the file
             logger.info("Waiting for OBS to finish saving the recording file...")
             time.sleep(5)  # Give OBS more time to save the file
-            
+
             # Try to find and move the recording file from default location
             moved_file_path = None
             if self.recording_start_time:
@@ -378,22 +389,22 @@ class ScreenRecorder:
                             participant_id = parts[0]
                             stage_part = [p for p in parts if p.startswith('stage')][0]
                             study_stage = int(stage_part.replace('stage', ''))
-                            
+
                             # Find the latest recording file in default locations
                             source_file = self._find_latest_recording_file(participant_id, study_stage, self.recording_start_time)
-                            
+
                             if source_file and os.path.exists(source_file):
                                 try:
                                     # Ensure the destination directory exists
                                     dest_dir = os.path.dirname(self.recording_file_path)
                                     os.makedirs(dest_dir, exist_ok=True)
-                                    
+
                                     # Move the file from default location to our recordings directory
                                     logger.info(f"Moving recording file from {source_file} to {self.recording_file_path}")
                                     shutil.move(source_file, self.recording_file_path)
                                     moved_file_path = self.recording_file_path
                                     logger.info(f"Successfully moved recording file to: {self.recording_file_path}")
-                                    
+
                                 except (OSError, PermissionError, shutil.Error) as e:
                                     logger.warning(f" Failed to move recording file: {e}")
                                     logger.info(f"   Recording remains at: {source_file}")
@@ -403,10 +414,10 @@ class ScreenRecorder:
                                 logger.info(f"   Expected to find file created after: {datetime.fromtimestamp(self.recording_start_time)}")
                     except (ValueError, IndexError, AttributeError) as e:
                         logger.warning(f" Could not parse recording filename for file moving: {e}")
-            
+
             final_file_location = moved_file_path or "default OBS location"
             logger.info(f"OBS screen recording stopped successfully. File location: {final_file_location}")
-            
+
             # Reset the recording state but preserve file path for Azure upload
             self.recording_process = None
             # Keep the file path available for Azure upload - update it if file was moved
@@ -414,9 +425,9 @@ class ScreenRecorder:
                 self.recording_file_path = moved_file_path
             # Don't reset recording_file_path to None here - let Azure upload handle cleanup
             self.recording_start_time = None
-            
+
             return True
-            
+
         except Exception as e:
             logger.warning(f"Failed to stop OBS screen recording: {e}")
             self.recording_process = None
