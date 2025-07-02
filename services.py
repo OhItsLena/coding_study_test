@@ -427,3 +427,22 @@ def determine_correct_route(participant_id, development_mode, study_stage, curre
     except Exception as e:
         logger.error(f"Error determining correct route: {str(e)}")
         return None
+
+
+# Window Focus Tracking Functions
+def start_focus_tracking(participant_id, study_stage, development_mode):
+    """Start tracking window focus changes for the study session."""
+    return _study_logger.start_focus_tracking(participant_id, study_stage, development_mode)
+
+
+def stop_focus_tracking_and_save(participant_id, study_stage, development_mode, 
+                                github_token=None, github_org=None):
+    """Stop focus tracking and save the collected events to logs."""
+    return _study_logger.stop_focus_tracking_and_save(
+        participant_id, study_stage, development_mode, github_token, github_org
+    )
+
+
+def is_focus_tracking_active():
+    """Check if focus tracking is currently active."""
+    return _study_logger.is_focus_tracking_active()
