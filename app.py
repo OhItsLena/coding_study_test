@@ -17,8 +17,7 @@ from services import (
     start_session_recording, stop_session_recording, is_recording_active,
     upload_session_recording_to_azure,
     setup_tutorial_repository, open_vscode_with_tutorial, commit_tutorial_completion,
-    get_session_log_history, determine_correct_route,
-    start_focus_tracking, stop_focus_tracking_and_save, is_focus_tracking_active
+    get_session_log_history, determine_correct_route
 )
 
 # Load environment variables from .env file
@@ -497,20 +496,6 @@ def goodbye():
             async_mode=ASYNC_GITHUB_MODE
         )
         mark_route_as_logged(session, 'goodbye', study_stage)
-        
-        # Stop window focus tracking and save events when study is completed
-        if is_focus_tracking_active():
-            logger.info(f"Stopping window focus tracking for participant {participant_id} at goodbye page")
-            github_token = os.getenv('GITHUB_TOKEN')
-            github_org = os.getenv('GITHUB_ORG', 'your-org')
-            focus_stopped = stop_focus_tracking_and_save(participant_id, study_stage, DEVELOPMENT_MODE, 
-                                                       github_token, github_org)
-            if focus_stopped:
-                logger.info(f"Window focus tracking events saved for participant {participant_id}, stage {study_stage}")
-            else:
-                logger.error(f"Failed to save focus tracking events for participant {participant_id}, stage {study_stage}")
-        else:
-            logger.info(f"No active focus tracking to stop for participant {participant_id} at goodbye page")
         
         # Stop screen recording when participant reaches goodbye page (study completely finished)
         if is_recording_active():
@@ -1054,44 +1039,6 @@ def debug_routing():
     <a href="/debug-session">← Back to Debug Session</a>
     """
 
-@app.route('/debug-focus')
-def debug_focus():
-    """Debug route for manually controlling window focus tracking during development"""
-    if not DEVELOPMENT_MODE:
-        return "Only available in development mode", 403
-    
-    action = request.args.get('action', 'status')
-    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
-    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
-    
-    if action == 'start':
-        result = start_focus_tracking(participant_id, study_stage, DEVELOPMENT_MODE)
-        message = f"Focus tracking started: {result}"
-    elif action == 'stop':
-        github_token = os.getenv('GITHUB_TOKEN')
-        github_org = os.getenv('GITHUB_ORG', 'your-org')
-        result = stop_focus_tracking_and_save(participant_id, study_stage, DEVELOPMENT_MODE, 
-                                            github_token, github_org)
-        message = f"Focus tracking stopped and saved: {result}"
-    else:
-        message = "Available actions: ?action=start or ?action=stop"
-    
-    focus_active = is_focus_tracking_active()
-    
-    return f"""
-    <h2>👁️ Window Focus Tracking Debug</h2>
-    <p><strong>Participant:</strong> {participant_id}</p>
-    <p><strong>Stage:</strong> {study_stage}</p>
-    <p><strong>Focus Tracking Active:</strong> {'✅ YES' if focus_active else '❌ NO'}</p>
-    <p><strong>Action Result:</strong> {message}</p>
-    <hr>
-    <a href="/debug-focus?action=start">Start Focus Tracking</a> | 
-    <a href="/debug-focus?action=stop">Stop Focus Tracking</a> | 
-    <a href="/debug-focus">Status Only</a>
-    <br><br>
-    <a href="/debug-session">← Back to Debug Session</a>
-    """
-
 if __name__ == '__main__':
     # Print mode information
     if DEVELOPMENT_MODE:
@@ -1139,28 +1086,8 @@ if __name__ == '__main__':
     else:
         logger.error(f"Failed to start screen recording for participant {participant_id}, stage {study_stage}")
     
-    # Start window focus tracking when server starts
-    logger.info("Starting window focus tracking at server startup...")
-    focus_tracking_started = start_focus_tracking(participant_id, study_stage, DEVELOPMENT_MODE)
-    if focus_tracking_started:
-        logger.info(f"Window focus tracking started for participant {participant_id}, stage {study_stage}")
-    else:
-        logger.error(f"Failed to start window focus tracking for participant {participant_id}, stage {study_stage}")
-    
-    # Set up graceful shutdown for async service, screen recording, and focus tracking
+    # Set up graceful shutdown for async service and screen recording
     def cleanup_on_exit():
-        # Stop window focus tracking and save events
-        if is_focus_tracking_active():
-            logger.info("Stopping window focus tracking and saving events on app shutdown...")
-            github_token = os.getenv('GITHUB_TOKEN')
-            github_org = os.getenv('GITHUB_ORG', 'your-org')
-            focus_stopped = stop_focus_tracking_and_save(participant_id, study_stage, DEVELOPMENT_MODE, 
-                                                       github_token, github_org)
-            if focus_stopped:
-                logger.info("Successfully saved focus tracking events on shutdown")
-            else:
-                logger.warning("Failed to save focus tracking events on shutdown")
-        
         # Stop any active screen recording
         if is_recording_active():
             logger.info("Stopping active screen recording on app shutdown...")
