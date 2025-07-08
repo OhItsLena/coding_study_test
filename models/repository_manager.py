@@ -348,8 +348,8 @@ class RepositoryManager:
         """
         Ensure the correct branch exists and is checked out for the given study stage.
         Uses simplified, deterministic approach:
-        - stage-1: Always created from remote main branch
-        - stage-2: Always created from local stage-1 branch
+        - stage-1: Always created from remote stage-1 branch
+        - stage-2: Always created from remote stage-1 branch
         
         Args:
             repo_path: Path to the repository
@@ -368,8 +368,8 @@ class RepositoryManager:
             # Stage-1: Always create from remote stage-1 branch
             source_branch = "origin/stage-1"
         elif study_stage == 2:
-            # Stage-2: Always create from local stage-1 branch
-            source_branch = "stage-1"
+            # Stage-2: Always create from remote stage-1 branch
+            source_branch = "origin/stage-1"
         else:
             logger.error(f"Error: Unsupported study stage: {study_stage}")
             return False
