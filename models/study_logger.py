@@ -58,7 +58,7 @@ class StudyLogger:
         """
         logs_directory = self.get_logs_directory_path(participant_id, development_mode)
         if not self.focus_tracker:
-            self.focus_tracker = FocusTracker(logs_directory, participant_id, development_mode)
+            self.focus_tracker = FocusTracker(logs_directory)
         self.focus_tracker.start()
 
     def stop_focus_tracking(self):

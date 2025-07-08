@@ -628,76 +628,13 @@ class FocusTracker:
     Cross-platform window focus tracker for study participants.
     Logs application/window focus changes to a JSON file.
     """
-    def __init__(self, logs_directory: str, participant_id: str, development_mode: bool, poll_interval: float = 1.0):
+    def __init__(self, logs_directory: str, poll_interval: float = 1.0):
         self.logs_directory = logs_directory
-        self.participant_id = participant_id
-        self.development_mode = development_mode
         self.poll_interval = poll_interval
         self.focus_log_path = os.path.join(logs_directory, "focus_log.json")
         self._stop_event = threading.Event()
         self._thread = None
         self._last_focus = None
-
-    def _ensure_logging_branch(self) -> bool:
-        """
-        Ensure the logging repository is on the logging branch before writing logs.
-        
-        Returns:
-            True if on logging branch or successfully switched to it, False otherwise
-        """
-        try:
-            # Check if logs directory exists and is a git repository
-            if not os.path.exists(self.logs_directory):
-                logger.warning(f"Logs directory does not exist: {self.logs_directory}")
-                return False
-            
-            git_dir = os.path.join(self.logs_directory, '.git')
-            if not os.path.exists(git_dir):
-                logger.warning(f"Logs directory is not a git repository: {self.logs_directory}")
-                return False
-            
-            # Save current working directory
-            original_cwd = os.getcwd()
-            
-            try:
-                # Change to logs directory
-                os.chdir(self.logs_directory)
-                
-                # Check current branch
-                kwargs = {'capture_output': True, 'text': True}
-                if platform.system() == "Windows":
-                    kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-                
-                result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
-                if result.returncode != 0:
-                    logger.warning(f"Failed to check current branch: {result.stderr}")
-                    return False
-                
-                current_branch = result.stdout.strip()
-                
-                # If already on logging branch, return True
-                if current_branch == "logging":
-                    return True
-                
-                # Try to switch to logging branch
-                result = subprocess.run(['git', 'checkout', 'logging'], **kwargs)
-                if result.returncode != 0:
-                    logger.warning(f"Failed to checkout logging branch: {result.stderr}")
-                    return False
-                
-                logger.info("Successfully switched to logging branch")
-                return True
-                
-            finally:
-                # Restore working directory
-                try:
-                    os.chdir(original_cwd)
-                except Exception as e:
-                    logger.warning(f"Failed to restore working directory: {e}")
-                    
-        except Exception as e:
-            logger.warning(f"Error ensuring logging branch: {e}")
-            return False
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -779,11 +716,6 @@ class FocusTracker:
             "window_title": focus_info.get("window_title", "")
         }
         try:
-            # Ensure logging repository is on logging branch before writing
-            if not self._ensure_logging_branch():
-                logger.warning("Failed to ensure logging branch - skipping focus event logging")
-                return
-                
             if not os.path.exists(self.logs_directory):
                 os.makedirs(self.logs_directory, exist_ok=True)
             if os.path.exists(self.focus_log_path):
@@ -796,3 +728,4 @@ class FocusTracker:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"Failed to log focus event: {e}")
+       
