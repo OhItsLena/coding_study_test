@@ -52,13 +52,13 @@ class StudyLogger:
         self.session_id = self._generate_session_id()
         self.focus_tracker = None
 
-    def start_focus_tracking(self, participant_id: str, development_mode: bool):
+    def start_focus_tracking(self, participant_id: str, study_stage: int, development_mode: bool):
         """
         Start background window focus tracking for the participant.
         """
         logs_directory = self.get_logs_directory_path(participant_id, development_mode)
         if not self.focus_tracker:
-            self.focus_tracker = FocusTracker(logs_directory)
+            self.focus_tracker = FocusTracker(logs_directory, study_stage)
         self.focus_tracker.start()
 
     def stop_focus_tracking(self):
@@ -116,7 +116,7 @@ class StudyLogger:
             return True
         logs_directory = self.get_logs_directory_path(participant_id, development_mode)
         # Start focus tracking
-        self.start_focus_tracking(participant_id, development_mode)
+        self.start_focus_tracking(participant_id, study_stage, development_mode)
         # Start screen recording
         return self.screen_recorder.start_recording(participant_id, study_stage, logs_directory)
     

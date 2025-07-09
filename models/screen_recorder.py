@@ -628,10 +628,11 @@ class FocusTracker:
     Cross-platform window focus tracker for study participants.
     Logs application/window focus changes to a JSON file.
     """
-    def __init__(self, logs_directory: str, poll_interval: float = 1.0):
+    def __init__(self, logs_directory: str, study_stage: int, poll_interval: float = 1.0):
         self.logs_directory = logs_directory
+        self.study_stage = study_stage
         self.poll_interval = poll_interval
-        self.focus_log_path = os.path.join(logs_directory, "focus_log.json")
+        self.focus_log_path = os.path.join(logs_directory, f"focus_log_stage{study_stage}.json")
         self._stop_event = threading.Event()
         self._thread = None
         self._last_focus = None
