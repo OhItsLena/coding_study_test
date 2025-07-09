@@ -10,9 +10,10 @@ import platform
 import threading
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from .github_service import GitHubService
+from .global_git_lock import get_participant_git_lock
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -31,24 +32,22 @@ class RepositoryManager:
             github_service: GitHubService instance for GitHub operations
         """
         self.github_service = github_service
-        # Repository locks to prevent concurrent access to the same repository
-        self._repo_locks = {}
-        self._locks_mutex = threading.Lock()
     
-    def _get_repo_lock(self, repo_path: str) -> threading.RLock:
+    def _run_git_command(self, repo_path: str, git_args: List[str], timeout: int = 10) -> subprocess.CompletedProcess:
         """
-        Get or create a reentrant lock for a specific repository path.
+        Run git command in specific directory using -C flag without changing cwd.
         
         Args:
             repo_path: Path to the repository
+            git_args: Git command arguments
+            timeout: Command timeout in seconds
             
         Returns:
-            Threading reentrant lock for the repository
+            subprocess.CompletedProcess result
         """
-        with self._locks_mutex:
-            if repo_path not in self._repo_locks:
-                self._repo_locks[repo_path] = threading.RLock()
-            return self._repo_locks[repo_path]
+        kwargs = self._get_subprocess_kwargs()
+        kwargs['timeout'] = timeout
+        return subprocess.run(['git', '-C', repo_path] + git_args, **kwargs)
     
     def _get_subprocess_kwargs(self) -> Dict[str, Any]:
         """
@@ -180,51 +179,29 @@ class RepositoryManager:
             True if successful, False otherwise
         """
         try:
-            original_cwd = os.getcwd()
-            os.chdir(repo_path)
-            
             # Check if user.name is set
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 5
-            result = subprocess.run([
-                'git', 'config', 'user.name'
-            ], **kwargs)
+            result = self._run_git_command(repo_path, ['config', 'user.name'], timeout=5)
             
             if result.returncode != 0 or not result.stdout.strip():
                 # Set user name
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 5
-                subprocess.run([
-                    'git', 'config', 'user.name', f'{participant_id}'
-                ], **kwargs)
-                logger.info(f"Set git user.name for participant {participant_id}")
+                result = self._run_git_command(repo_path, ['config', 'user.name', f'{participant_id}'], timeout=5)
+                if result.returncode == 0:
+                    logger.info(f"Set git user.name for participant {participant_id}")
             
             # Check if user.email is set
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 5
-            result = subprocess.run([
-                'git', 'config', 'user.email'
-            ], **kwargs)
+            result = self._run_git_command(repo_path, ['config', 'user.email'], timeout=5)
             
             if result.returncode != 0 or not result.stdout.strip():
                 # Set user email
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 5
-                subprocess.run([
-                    'git', 'config', 'user.email', f'{participant_id}@study.local'
-                ], **kwargs)
-                logger.info(f"Set git user.email for participant {participant_id}")
+                result = self._run_git_command(repo_path, ['config', 'user.email', f'{participant_id}@study.local'], timeout=5)
+                if result.returncode == 0:
+                    logger.info(f"Set git user.email for participant {participant_id}")
                 
             return True
             
         except Exception as e:
             logger.warning(f"Failed to set git config: {str(e)}")
             return False
-        finally:
-            try:
-                os.chdir(original_cwd)
-            except Exception as e:
-                logger.warning(f"Failed to restore working directory: {str(e)}")
     
     def ensure_branch(self, repo_path: str, branch_name: str, source_branch: str = None, 
                      participant_id: str = None, github_token: Optional[str] = None, 
@@ -232,14 +209,14 @@ class RepositoryManager:
         """
         Ensure a specific branch exists and is checked out.
         Uses simplified, deterministic approach for creating branches from specified sources.
-        Thread-safe with repository-level locking.
+        Thread-safe with participant-level locking.
         
         Args:
             repo_path: Path to the repository
             branch_name: Name of the branch to ensure (e.g., 'stage-1', 'tutorial')
             source_branch: Source branch to create from if branch doesn't exist (optional)
                           If None, will try to create from remote branch with same name
-            participant_id: Participant ID for backup operations (optional)
+            participant_id: Participant ID for backup operations (required for locking)
             github_token: GitHub token for backup operations (optional)
             github_org: GitHub organization for backup operations (optional)
             skip_backup: Skip backup operations (used when already on correct branch)
@@ -247,30 +224,27 @@ class RepositoryManager:
         Returns:
             True if successful, False otherwise
         """
-        # Get repository-specific lock to prevent concurrent access
-        repo_lock = self._get_repo_lock(repo_path)
+        if not participant_id:
+            raise ValueError("participant_id is required for git operations")
         
-        with repo_lock:
+        # Use unified participant-level lock to coordinate with StudyLogger
+        lock = get_participant_git_lock(participant_id)
+        
+        with lock:
             try:
-                original_cwd = os.getcwd()
-                os.chdir(repo_path)
-                
-                logger.info(f"Setting up branch: {branch_name} (locked)")
+                logger.info(f"Setting up branch: {branch_name} for participant {participant_id} (locked)")
                 
                 # Step 1: Check current branch to see if backup is needed
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 5
-                result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
+                result = self._run_git_command(repo_path, ['branch', '--show-current'], timeout=5)
                 current_branch = result.stdout.strip() if result.returncode == 0 else None
                 
                 # Step 2: Fetch latest remote refs
-                kwargs['timeout'] = 15
-                result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
+                result = self._run_git_command(repo_path, ['fetch', 'origin'], timeout=15)
                 if result.returncode != 0:
                     logger.warning(f"Failed to fetch from remote: {result.stderr}")
                 
                 # Step 3: Check if the branch already exists locally
-                result = subprocess.run(['git', 'branch', '--list', branch_name], **kwargs)
+                result = self._run_git_command(repo_path, ['branch', '--list', branch_name], timeout=5)
                 branch_exists = branch_name in result.stdout
                 
                 if branch_exists and current_branch == branch_name:
@@ -281,7 +255,7 @@ class RepositoryManager:
                 if branch_exists:
                     # Branch exists, just switch to it
                     logger.info(f"Branch {branch_name} exists locally, switching to it")
-                    result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
+                    result = self._run_git_command(repo_path, ['checkout', branch_name], timeout=10)
                     if result.returncode != 0:
                         logger.warning(f"Failed to checkout existing branch {branch_name}: {result.stderr}")
                         return False
@@ -296,19 +270,19 @@ class RepositoryManager:
                     # Check if source branch exists (local or remote)
                     if source_branch.startswith('origin/'):
                         # Remote source branch
-                        result = subprocess.run(['git', 'branch', '-r', '--list', source_branch], **kwargs)
+                        result = self._run_git_command(repo_path, ['branch', '-r', '--list', source_branch], timeout=5)
                         if source_branch not in result.stdout:
                             logger.error(f"Error: {source_branch} branch not found. Cannot create {branch_name}.")
                             return False
                     else:
                         # Local source branch
-                        result = subprocess.run(['git', 'branch', '--list', source_branch], **kwargs)
+                        result = self._run_git_command(repo_path, ['branch', '--list', source_branch], timeout=5)
                         if source_branch not in result.stdout:
                             logger.error(f"Error: {source_branch} branch not found locally. Cannot create {branch_name}.")
                             return False
                     
                     # Create branch from source
-                    result = subprocess.run(['git', 'checkout', '-b', branch_name, source_branch], **kwargs)
+                    result = self._run_git_command(repo_path, ['checkout', '-b', branch_name, source_branch], timeout=10)
                     if result.returncode != 0:
                         logger.warning(f"Failed to create {branch_name} from {source_branch}: {result.stderr}")
                         return False
@@ -317,11 +291,11 @@ class RepositoryManager:
                 else:
                     # Try to create from remote branch with same name
                     remote_branch = f"origin/{branch_name}"
-                    result = subprocess.run(['git', 'branch', '-r', '--list', remote_branch], **kwargs)
+                    result = self._run_git_command(repo_path, ['branch', '-r', '--list', remote_branch], timeout=5)
                     if remote_branch in result.stdout:
                         # Create from remote branch
                         logger.info(f"Creating local {branch_name} branch from remote")
-                        result = subprocess.run(['git', 'checkout', '-b', branch_name, remote_branch], **kwargs)
+                        result = self._run_git_command(repo_path, ['checkout', '-b', branch_name, remote_branch], timeout=10)
                         if result.returncode != 0:
                             logger.warning(f"Failed to create {branch_name} from remote: {result.stderr}")
                             return False
@@ -336,11 +310,6 @@ class RepositoryManager:
             except Exception as e:
                 logger.info(f"Error ensuring branch: {str(e)}")
                 return False
-            finally:
-                try:
-                    os.chdir(original_cwd)
-                except Exception as e:
-                    logger.warning(f"Failed to restore working directory: {str(e)}")
 
     def ensure_stage_branch(self, repo_path: str, study_stage: int, participant_id: str = None, 
                            github_token: Optional[str] = None, github_org: str = None, 
@@ -426,7 +395,7 @@ class RepositoryManager:
         Unified method to commit changes on current branch and backup all branches.
         This is the main method called when requirements are completed or timer expires.
         Can also be used for tutorial completion by passing study_stage=None and repo_type="tutorial".
-        Thread-safe with repository-level locking.
+        Thread-safe with participant-level locking.
         
         Args:
             participant_id: The participant's unique identifier
@@ -442,12 +411,10 @@ class RepositoryManager:
         """
         repo_path = self.get_repository_path(participant_id, development_mode, repo_type)
         
-        # Get repository-specific lock to prevent concurrent access
-        repo_lock = self._get_repo_lock(repo_path)
+        # Use unified participant-level lock to coordinate with StudyLogger
+        lock = get_participant_git_lock(participant_id)
         
-        with repo_lock:
-            original_cwd = os.getcwd()
-            
+        with lock:
             try:
                 # Check if repository exists
                 if not os.path.exists(repo_path):
@@ -463,20 +430,17 @@ class RepositoryManager:
                 # Ensure git config is set up
                 self.ensure_git_config(repo_path, participant_id)
                 
-                # Change to repository directory
-                os.chdir(repo_path)
-                
                 logger.info(f"Committing changes for {participant_id} (locked)")
                 
                 # Step 1: Commit any changes on the current branch
-                success = self._commit_current_branch_changes(study_stage, commit_message)
+                success = self._commit_current_branch_changes(repo_path, study_stage, commit_message)
                 if not success:
                     logger.info("Failed to commit changes on current branch")
                     return False
                 
                 # Step 2: Push all branches to remote as backup (if we have authentication)
                 if github_token:
-                    success = self._push_all_branches_backup(participant_id, github_token, github_org, repo_type)
+                    success = self._push_all_branches_backup(repo_path, participant_id, github_token, github_org, repo_type)
                     if not success:
                         logger.info("Warning: Failed to backup all branches to remote")
                         # Don't return False here - local commit succeeded
@@ -489,17 +453,13 @@ class RepositoryManager:
             except Exception as e:
                 logger.info(f"Error in commit and backup workflow: {str(e)}")
                 return False
-            finally:
-                try:
-                    os.chdir(original_cwd)
-                except Exception as e:
-                    logger.warning(f"Failed to restore original working directory: {str(e)}")
     
-    def _commit_current_branch_changes(self, study_stage: Optional[int], commit_message: str) -> bool:
+    def _commit_current_branch_changes(self, repo_path: str, study_stage: Optional[int], commit_message: str) -> bool:
         """
         Commit any changes on the current branch.
         
         Args:
+            repo_path: Path to the repository
             study_stage: The study stage for logging (optional, for tutorial use None)
             commit_message: Message for the commit
         
@@ -508,9 +468,7 @@ class RepositoryManager:
         """
         try:
             # Check if there are any changes to commit
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 10
-            result = subprocess.run(['git', 'status', '--porcelain'], **kwargs)
+            result = self._run_git_command(repo_path, ['status', '--porcelain'], timeout=10)
             
             if result.returncode != 0:
                 logger.warning(f"Failed to check git status. Error: {result.stderr}")
@@ -523,11 +481,11 @@ class RepositoryManager:
                 return True
             
             # Get current branch name for logging
-            result = subprocess.run(['git', 'branch', '--show-current'], **kwargs)
+            result = self._run_git_command(repo_path, ['branch', '--show-current'], timeout=5)
             current_branch = result.stdout.strip() if result.returncode == 0 else "unknown"
             
             # Add all changes
-            result = subprocess.run(['git', 'add', '.'], **kwargs)
+            result = self._run_git_command(repo_path, ['add', '.'], timeout=10)
             if result.returncode != 0:
                 logger.warning(f"Failed to add changes. Error: {result.stderr}")
                 return False
@@ -540,7 +498,7 @@ class RepositoryManager:
                 full_commit_message = f"{commit_message} - {timestamp}"
             
             # Commit changes
-            result = subprocess.run(['git', 'commit', '-m', full_commit_message], **kwargs)
+            result = self._run_git_command(repo_path, ['commit', '-m', full_commit_message], timeout=10)
             if result.returncode != 0:
                 logger.warning(f"Failed to commit changes. Error: {result.stderr}")
                 return False
@@ -552,11 +510,12 @@ class RepositoryManager:
             logger.info(f"Error committing current branch changes: {str(e)}")
             return False
     
-    def _push_all_branches_backup(self, participant_id: str, github_token: str, github_org: str, repo_type: str = "study") -> bool:
+    def _push_all_branches_backup(self, repo_path: str, participant_id: str, github_token: str, github_org: str, repo_type: str = "study") -> bool:
         """
         Push all local branches to remote as backup.
         
         Args:
+            repo_path: Path to the repository
             participant_id: The participant's unique identifier
             github_token: GitHub personal access token
             github_org: GitHub organization name
@@ -569,14 +528,12 @@ class RepositoryManager:
             repo_name = f"study-{participant_id}"
             authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
             
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 10
-            result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
+            result = self._run_git_command(repo_path, ['remote', 'set-url', 'origin', authenticated_url], timeout=10)
             if result.returncode != 0:
                 logger.warning(f"Failed to set authenticated remote URL: {result.stderr}")
             
             # Get list of all local branches
-            result = subprocess.run(['git', 'branch', '--format=%(refname:short)'], **kwargs)
+            result = self._run_git_command(repo_path, ['branch', '--format=%(refname:short)'], timeout=10)
             if result.returncode != 0:
                 logger.warning(f"Failed to get list of local branches: {result.stderr}")
                 return False
@@ -592,7 +549,7 @@ class RepositoryManager:
             # Push each branch with retry logic
             success_count = 0
             for branch in local_branches:
-                if self._push_branch_with_retry(branch, max_retries=2):
+                if self._push_branch_with_retry(repo_path, branch, max_retries=2):
                     success_count += 1
                     logger.info(f"Successfully backed up branch: {branch}")
                 else:
@@ -605,11 +562,12 @@ class RepositoryManager:
             logger.info(f"Error backing up all branches: {str(e)}")
             return False
     
-    def _push_branch_with_retry(self, branch_name: str, max_retries: int = 2) -> bool:
+    def _push_branch_with_retry(self, repo_path: str, branch_name: str, max_retries: int = 2) -> bool:
         """
         Push a specific branch with simple retry logic.
         
         Args:
+            repo_path: Path to the repository
             branch_name: Name of the branch to push
             max_retries: Maximum number of retry attempts
         
@@ -618,9 +576,7 @@ class RepositoryManager:
         """
         for attempt in range(max_retries):
             try:
-                kwargs = self._get_subprocess_kwargs()
-                kwargs['timeout'] = 30
-                result = subprocess.run(['git', 'push', 'origin', branch_name], **kwargs)
+                result = self._run_git_command(repo_path, ['push', 'origin', branch_name], timeout=30)
                 
                 if result.returncode == 0:
                     return True
@@ -628,7 +584,7 @@ class RepositoryManager:
                     logger.info(f"Push failed for {branch_name} (attempt {attempt + 1}/{max_retries}): {result.stderr}")
                     if attempt < max_retries - 1:
                         # Try to fetch and retry on next attempt
-                        fetch_result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
+                        fetch_result = self._run_git_command(repo_path, ['fetch', 'origin'], timeout=15)
                         if fetch_result.returncode != 0:
                             logger.warning(f"Failed to fetch before retry: {fetch_result.stderr}")
                         
@@ -650,7 +606,22 @@ class RepositoryManager:
         Returns:
             True if successful, False otherwise
         """
-        return self.ensure_branch(repo_path=repo_path, branch_name="tutorial")
+        # Extract participant_id from repo_path for locking
+        repo_name = os.path.basename(repo_path)
+        if repo_name.startswith('tutorial-'):
+            participant_id = repo_name[len('tutorial-'):]
+        else:
+            # Fallback - try to determine from path
+            path_parts = repo_path.split(os.sep)
+            for part in path_parts:
+                if part.startswith('tutorial-'):
+                    participant_id = part[len('tutorial-'):]
+                    break
+            else:
+                logger.error("Could not determine participant_id from repo_path")
+                return False
+        
+        return self.ensure_branch(repo_path=repo_path, branch_name="tutorial", participant_id=participant_id)
 
     def setup_tutorial_repository(self, participant_id: str, development_mode: bool,
                                  github_token: str, github_org: str) -> bool:

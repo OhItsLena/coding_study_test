@@ -69,6 +69,22 @@ class StudyLogger:
             self.focus_tracker.stop()
             self.focus_tracker = None
     
+    def _run_git_command(self, repo_path: str, git_args: List[str], timeout: int = 10) -> subprocess.CompletedProcess:
+        """
+        Run git command in specific directory using -C flag without changing cwd.
+        
+        Args:
+            repo_path: Path to the repository
+            git_args: Git command arguments
+            timeout: Command timeout in seconds
+            
+        Returns:
+            subprocess.CompletedProcess result
+        """
+        kwargs = self._get_subprocess_kwargs()
+        kwargs['timeout'] = timeout
+        return subprocess.run(['git', '-C', repo_path] + git_args, **kwargs)
+    
     def _generate_session_id(self) -> str:
         """
         Generate a unique session ID for this app run.
@@ -247,23 +263,15 @@ class StudyLogger:
             git_dir = os.path.join(logs_path, '.git')
             if not os.path.exists(git_dir):
                 # Initialize as git repository
-                os.chdir(logs_path)
-                
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run([
-                    'git', 'init'
-                ], **kwargs)
+                result = self._run_git_command(logs_path, ['init'], timeout=10)
                 
                 if result.returncode != 0:
                     logger.warning(f"Failed to initialize git repository in logs directory. Error: {result.stderr}")
                     return False
                 
                 # Set up git config (basic config for logging)
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 5
-                subprocess.run(['git', 'config', 'user.name', f'{participant_id}'], **kwargs)
-                subprocess.run(['git', 'config', 'user.email', f'{participant_id}@study.local'], **kwargs)
+                self._run_git_command(logs_path, ['config', 'user.name', f'{participant_id}'], timeout=5)
+                self._run_git_command(logs_path, ['config', 'user.email', f'{participant_id}@study.local'], timeout=5)
                 
                 # Create initial README
                 readme_content = f"# Study Logs for Participant {participant_id}\n\nThis repository contains anonymized logs for study analysis.\n"
@@ -272,22 +280,17 @@ class StudyLogger:
                     f.write(readme_content)
                 
                 # Initial commit
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 5
-                subprocess.run(['git', 'add', 'README.md'], **kwargs)
-                subprocess.run(['git', 'commit', '-m', 'Initial commit for logging repository'], **kwargs)
+                self._run_git_command(logs_path, ['add', 'README.md'], timeout=5)
+                self._run_git_command(logs_path, ['commit', '-m', 'Initial commit for logging repository'], timeout=5)
                 
                 logger.info(f"Initialized logging repository at: {logs_path}")
-            
-            # Ensure we're in the logs directory
-            os.chdir(logs_path)
             
             # Set up remote if we have authentication and it doesn't exist
             if github_token:
                 self._setup_logging_remote(participant_id, github_token, github_org)
             
             # Ensure logging branch with remote synchronization
-            return self._ensure_logging_branch_with_sync()
+            return self._ensure_logging_branch_with_sync(participant_id, development_mode)
             
         except Exception as e:
             logger.info(f"Error ensuring logging repository: {str(e)}")
@@ -311,25 +314,22 @@ class StudyLogger:
             True if successful, False otherwise
         """
         try:
+            logs_path = self.get_logs_directory_path(participant_id, False)  # Use logs path
             repo_name = f"study-{participant_id}"
             authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
             
             # Check if remote exists
-            kwargs = self._get_subprocess_kwargs()
-            kwargs["timeout"] = 5
-            result = subprocess.run(['git', 'remote'], **kwargs)
+            result = self._run_git_command(logs_path, ['remote'], timeout=5)
             
             if 'origin' not in result.stdout:
                 # Add remote
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'remote', 'add', 'origin', authenticated_url], **kwargs)
+                result = self._run_git_command(logs_path, ['remote', 'add', 'origin', authenticated_url], timeout=10)
                 if result.returncode != 0:
                     logger.warning(f"Failed to add remote: {result.stderr}")
                     return False
             else:
                 # Update remote URL
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
+                result = self._run_git_command(logs_path, ['remote', 'set-url', 'origin', authenticated_url], timeout=10)
                 if result.returncode != 0:
                     logger.warning(f"Failed to set remote URL: {result.stderr}")
                     return False
@@ -340,51 +340,46 @@ class StudyLogger:
             logger.info(f"Error setting up logging remote: {str(e)}")
             return False
     
-    def _ensure_logging_branch_with_sync(self) -> bool:
+    def _ensure_logging_branch_with_sync(self, participant_id: str = "", development_mode: bool = False) -> bool:
         """
         Ensure logging branch exists and is synced with remote.
         Uses a single 'logging' branch for all sessions.
+        
+        Args:
+            participant_id: The participant's unique identifier (optional for general ops)
+            development_mode: Whether running in development mode
         
         Returns:
             True if successful, False otherwise
         """
         try:
+            logs_path = self.get_logs_directory_path(participant_id, development_mode) if participant_id else os.getcwd()
             branch_name = self.get_logging_branch_name()  # Always 'logging'
             
             # First, try to fetch from remote to get latest refs
-            kwargs = self._get_subprocess_kwargs()
-            kwargs["timeout"] = 15
-            result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
+            result = self._run_git_command(logs_path, ['fetch', 'origin'], timeout=15)
             if result.returncode != 0:
                 logger.warning(f"Failed to fetch from remote (may not exist yet): {result.stderr}")
             
             # Check if logging branch exists locally
-            kwargs = self._get_subprocess_kwargs()
-            kwargs["timeout"] = 10
-            result = subprocess.run(['git', 'branch', '--list', branch_name], **kwargs)
+            result = self._run_git_command(logs_path, ['branch', '--list', branch_name], timeout=10)
             local_branch_exists = branch_name in result.stdout
             
             # Check if logging branch exists remotely
-            kwargs = self._get_subprocess_kwargs()
-            kwargs["timeout"] = 10
-            result = subprocess.run(['git', 'branch', '-r', '--list', f'origin/{branch_name}'], **kwargs)
+            result = self._run_git_command(logs_path, ['branch', '-r', '--list', f'origin/{branch_name}'], timeout=10)
             remote_branch_exists = f'origin/{branch_name}' in result.stdout
             
             if local_branch_exists and remote_branch_exists:
                 # Both exist - checkout local and pull updates
                 logger.info(f"Branch {branch_name} exists both locally and remotely - syncing")
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
+                result = self._run_git_command(logs_path, ['checkout', branch_name], timeout=10)
                 
                 if result.returncode != 0:
                     logger.warning(f"Failed to checkout branch {branch_name}: {result.stderr}")
                     return False
                 
                 # Pull updates to get existing session data
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 20
-                result = subprocess.run(['git', 'pull', 'origin', branch_name, '--allow-unrelated-histories'], **kwargs)
+                result = self._run_git_command(logs_path, ['pull', 'origin', branch_name, '--allow-unrelated-histories'], timeout=20)
                 
                 if result.returncode != 0:
                     logger.warning(f"Failed to pull branch {branch_name} updates: {result.stderr}")
@@ -394,9 +389,7 @@ class StudyLogger:
             elif local_branch_exists:
                 # Only local exists - just switch to it
                 logger.info(f"Switching to existing local branch {branch_name}")
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'checkout', branch_name], **kwargs)
+                result = self._run_git_command(logs_path, ['checkout', branch_name], timeout=10)
                 
                 if result.returncode != 0:
                     logger.warning(f"Failed to checkout branch {branch_name}: {result.stderr}")
@@ -405,11 +398,7 @@ class StudyLogger:
             elif remote_branch_exists:
                 # Only remote exists - create local tracking branch
                 logger.info(f"Creating local branch {branch_name} tracking remote origin/{branch_name}")
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 15
-                result = subprocess.run([
-                    'git', 'checkout', '-b', branch_name, f'origin/{branch_name}'
-                ], **kwargs)
+                result = self._run_git_command(logs_path, ['checkout', '-b', branch_name, f'origin/{branch_name}'], timeout=15)
                 
                 if result.returncode != 0:
                     logger.warning(f"Failed to create tracking branch {branch_name}: {result.stderr}")
@@ -420,20 +409,16 @@ class StudyLogger:
                 logger.info(f"Creating new branch {branch_name}")
                 
                 # First ensure we're on main/master
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'checkout', 'main'], **kwargs)
+                result = self._run_git_command(logs_path, ['checkout', 'main'], timeout=10)
                 if result.returncode != 0:
                     # Try master if main doesn't exist
-                    result = subprocess.run(['git', 'checkout', 'master'], **kwargs)
+                    result = self._run_git_command(logs_path, ['checkout', 'master'], timeout=10)
                     if result.returncode != 0:
                         logger.warning(f"Failed to checkout main/master branch: {result.stderr}")
                         return False
                 
                 # Create new branch
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'checkout', '-b', branch_name], **kwargs)
+                result = self._run_git_command(logs_path, ['checkout', '-b', branch_name], timeout=10)
                 
                 if result.returncode != 0:
                     logger.warning(f"Failed to create branch {branch_name}: {result.stderr}")
@@ -482,9 +467,7 @@ class StudyLogger:
                 os.chdir(logs_path)
                 
                 # Ensure we're on the logging branch
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 5
-                subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
+                self._run_git_command(logs_path, ['checkout', self.get_logging_branch_name()], timeout=5)
                 
                 # Load existing logs from remote or create new structure
                 logs_data = {
@@ -549,12 +532,10 @@ class StudyLogger:
                     json.dump(logs_data, f, indent=2, ensure_ascii=False)
                 
                 # Commit and push all files in the logs directory (including focus_log.json)
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                subprocess.run(['git', 'add', '.'], **kwargs)
+                self._run_git_command(logs_path, ['add', '.'], timeout=10)
 
                 commit_message = f"Log route visit: {route_name} (stage {study_stage}) at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
-                result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
+                result = self._run_git_command(logs_path, ['commit', '-m', commit_message], timeout=10)
 
                 if result.returncode == 0:
                     logger.info(f"Successfully logged route visit: {route_name} for participant {participant_id}, stage {study_stage}")
@@ -627,23 +608,20 @@ class StudyLogger:
         """
         for attempt in range(max_retries):
             try:
+                logs_path = self.get_logs_directory_path(participant_id, False)
                 # Set up the authenticated remote URL
                 repo_name = f"study-{participant_id}"
                 authenticated_url = self.github_service.get_authenticated_repo_url(repo_name, github_token, github_org)
                 
                 # Update the origin URL to use authentication
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'remote', 'set-url', 'origin', authenticated_url], **kwargs)
+                result = self._run_git_command(logs_path, ['remote', 'set-url', 'origin', authenticated_url], timeout=10)
                 
                 if result.returncode != 0:
                     logger.warning(f"Failed to set authenticated remote URL: {result.stderr}")
                 
                 # Attempt to push our unique logging branch
                 branch_name = self.get_logging_branch_name()
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 30
-                result = subprocess.run(['git', 'push', 'origin', branch_name], **kwargs)
+                result = self._run_git_command(logs_path, ['push', 'origin', branch_name], timeout=30)
                 
                 if result.returncode == 0:
                     logger.info(f"Successfully pushed logs to remote for participant {participant_id}")
@@ -654,7 +632,7 @@ class StudyLogger:
                         logger.info(f"Log push rejected (attempt {attempt + 1}/{max_retries}). Trying to sync with remote...")
                         
                         # Try to sync with remote logging branch
-                        if self._sync_logging_with_remote():
+                        if self._sync_logging_with_remote(participant_id):
                             logger.info("Successfully synced logging with remote. Retrying push...")
                             continue
                         else:
@@ -677,30 +655,30 @@ class StudyLogger:
         
         return False
     
-    def _sync_logging_with_remote(self) -> bool:
+    def _sync_logging_with_remote(self, participant_id: str = "") -> bool:
         """
         Sync local logging branch with remote logging branch.
         Uses unique branch names so conflicts should be rare.
+        
+        Args:
+            participant_id: The participant's unique identifier (optional for general ops)
         
         Returns:
             True if successful, False otherwise
         """
         try:
+            logs_path = self.get_logs_directory_path(participant_id, False) if participant_id else os.getcwd()
             branch_name = self.get_logging_branch_name()
             
             # Fetch latest changes
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 15
-            result = subprocess.run(['git', 'fetch', 'origin'], **kwargs)
+            result = self._run_git_command(logs_path, ['fetch', 'origin'], timeout=15)
             
             if result.returncode != 0:
                 logger.warning(f"Failed to fetch from remote: {result.stderr}")
                 return False
             
             # Try to pull and merge
-            kwargs = self._get_subprocess_kwargs()
-            kwargs['timeout'] = 20
-            result = subprocess.run(['git', 'pull', 'origin', branch_name, '--allow-unrelated-histories'], **kwargs)
+            result = self._run_git_command(logs_path, ['pull', 'origin', branch_name, '--allow-unrelated-histories'], timeout=20)
             
             if result.returncode == 0:
                 logger.info(f"Successfully merged remote changes for branch {branch_name}")
@@ -747,9 +725,7 @@ class StudyLogger:
                 os.chdir(logs_path)
                 
                 # Ensure we're on the logging branch
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 5
-                subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
+                self._run_git_command(logs_path, ['checkout', self.get_logging_branch_name()], timeout=5)
                 
                 # Load existing transitions or create new structure
                 transitions_data = {'transitions': []}
@@ -789,13 +765,10 @@ class StudyLogger:
                     json.dump(transitions_data, f, indent=2, ensure_ascii=False)
                 
                 # Commit the transition entry
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 5
-                subprocess.run(['git', 'add', 'stage_transitions.json'], **kwargs)
+                self._run_git_command(logs_path, ['add', 'stage_transitions.json'], timeout=5)
                 
                 commit_message = f"Mark stage transition: {transition_key} at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
+                result = self._run_git_command(logs_path, ['commit', '-m', commit_message], timeout=10)
                 
                 if result.returncode == 0:
                     logger.info(f"Successfully logged stage transition: {transition_key} for participant {participant_id}")
@@ -908,9 +881,7 @@ class StudyLogger:
             os.chdir(logs_path)
             
             # Ensure we're on the logging branch
-            kwargs = self._get_subprocess_kwargs()
-            kwargs["timeout"] = 5
-            subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
+            self._run_git_command(logs_path, ['checkout', self.get_logging_branch_name()], timeout=5)
             
             # Create vscode-storage directory if it doesn't exist
             vscode_logs_dir = os.path.join(logs_path, 'vscode-storage')
@@ -938,14 +909,11 @@ class StudyLogger:
                             continue
             
             # Add files to git
-            kwargs = self._get_subprocess_kwargs()
-            kwargs["timeout"] = 10
-            subprocess.run(['git', 'add', 'vscode-storage/'], **kwargs)
+            self._run_git_command(logs_path, ['add', 'vscode-storage/'], timeout=10)
             
             # Commit the VS Code workspace storage
             commit_message = f"Save VS Code workspace storage for stage {study_stage} at {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
-            kwargs["timeout"] = 15
-            result = subprocess.run(['git', 'commit', '-m', commit_message], **kwargs)
+            result = self._run_git_command(logs_path, ['commit', '-m', commit_message], timeout=15)
             
             if result.returncode == 0:
                 logger.info(f"Successfully saved VS Code workspace storage for stage {study_stage}")
@@ -1024,9 +992,7 @@ class StudyLogger:
                 os.chdir(logs_path)
                 
                 # Ensure we're on the logging branch
-                kwargs = self._get_subprocess_kwargs()
-                kwargs["timeout"] = 10
-                result = subprocess.run(['git', 'checkout', self.get_logging_branch_name()], **kwargs)
+                result = self._run_git_command(logs_path, ['checkout', self.get_logging_branch_name()], timeout=10)
                 
                 if result.returncode != 0:
                     logger.warning(f"Failed to checkout logging branch: {result.stderr}")
