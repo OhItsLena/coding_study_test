@@ -762,7 +762,7 @@ class VSCodeManager:
             
             # If study_stage is provided and it's a study repo, ensure the correct branch is active
             if study_stage is not None and repo_type == "study":
-                if not self.repository_manager.ensure_stage_branch(repo_path, study_stage, skip_backup=True):
+                if not self.repository_manager.ensure_stage_branch(repo_path, study_stage, participant_id=participant_id, skip_backup=True):
                     logger.warning(f"Failed to ensure correct branch for stage {study_stage}")
             
             # Try to open VS Code with the repository
