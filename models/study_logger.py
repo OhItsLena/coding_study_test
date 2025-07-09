@@ -384,7 +384,7 @@ class StudyLogger:
                 # Pull updates to get existing session data
                 kwargs = self._get_subprocess_kwargs()
                 kwargs["timeout"] = 20
-                result = subprocess.run(['git', 'pull', 'origin', branch_name], **kwargs)
+                result = subprocess.run(['git', 'pull', 'origin', branch_name, '--allow-unrelated-histories'], **kwargs)
                 
                 if result.returncode != 0:
                     logger.warning(f"Failed to pull branch {branch_name} updates: {result.stderr}")
@@ -700,7 +700,7 @@ class StudyLogger:
             # Try to pull and merge
             kwargs = self._get_subprocess_kwargs()
             kwargs['timeout'] = 20
-            result = subprocess.run(['git', 'pull', 'origin', branch_name], **kwargs)
+            result = subprocess.run(['git', 'pull', 'origin', branch_name, '--allow-unrelated-histories'], **kwargs)
             
             if result.returncode == 0:
                 logger.info(f"Successfully merged remote changes for branch {branch_name}")
