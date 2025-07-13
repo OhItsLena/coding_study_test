@@ -94,6 +94,53 @@ h1 {
     </div>
 
     <p>{{ tutorial.description }}</p>
+
+    <div class="technical-notes">
+    <h4>Getting Started with Copilot</h4>
+    {% if coding_condition == 'ai-assisted' %}
+    <p>GitHub Copilot offers several ways to assist you with coding:</p>
+    <ul>
+        <li>
+            <strong>Tab Auto-Complete:</strong> As you type in the editor, Copilot will automatically show ghost text suggestions that you can accept by pressing Tab.
+            Hover over the suggestion in the editor to see alternative suggestions. You can use the arrow controls to show the next or previous suggestion.
+            <div class="tutorial-video">
+                <img src="{{ url_for('static', filename='ghost_text_copilot.png') }}" alt="GitHub Copilot UI Overview" />
+            </div>
+        </li>
+        <li>
+            <strong>Inline Chat:</strong> Press Ctrl+I while in the editor or select the sparkles ✨ to open inline chat for quick code modifications and explanations. Look for the chat box that appears.
+            <div class="tutorial-video">
+                <img src="{{ url_for('static', filename='inline_chat_copilot.png') }}" alt="GitHub Copilot UI Overview" />
+            </div>            
+        </li>
+        <li>
+            <strong>Chat Window:</strong> Open the Chat view from the Copilot menu in the title bar or press Ctrl+Alt+I. 
+            Select the "Ask" mode to ask Copilot questions about coding and technology topics, explain code, or brainstorm ideas.
+            Add relevant context to your questions to get the best results.
+            <div class="tutorial-video">
+                <img src="{{ url_for('static', filename='menu_bar_copilot.png') }}" alt="GitHub Copilot UI Overview" />
+                <img src="{{ url_for('static', filename='ask_mode_copilot.png') }}" alt="GitHub Copilot UI Overview" />
+            </div>
+            <strong>Note:</strong> Use Claude Sonnet 4 as model to get the best results in Ask Mode.
+        </li>
+    </ul>
+    {% elif coding_condition == 'vibe' %}
+    <p>GitHub Copilot provides an intelligent coding assistant through:</p>
+    <ul>
+        <li><strong>Copilot Chat (Agent Mode):</strong> Open the Chat view from the Copilot menu in the title bar or press Ctrl+Alt+I. 
+        Select the "Agent" mode to to let Copilot autonomously plan and execute the tasks that are needed to complete your request. 
+        These tasks can involve editing code but also include running commands in the terminal. 
+        In agent mode, Copilot might invoke different tools to accomplish the task.
+        Add relevant context (files etc.) to improve your results.</li>
+        <div class="tutorial-video">   
+            <img src="{{ url_for('static', filename='menu_bar_copilot.png') }}" alt="Copilot Chat in Ask Mode" />
+            <img src="{{ url_for('static', filename='agent_mode_copilot.png') }}" alt="Copilot Chat in Ask Mode" />
+        </div>
+        <strong>Note:</strong> Use Claude Sonnet 4 as model to get the best results in Agent Mode.
+    </ul>
+    {% endif %}
+   </div>
+
     <p>Now please complete the following tutorial steps to get to know your development environment. A tutorial workspace opens automatically in Visual Studio Code. If it doesn't: <a href="/open-vscode-tutorial" class="open-vscode-btn no-loading">Open VS Code</a>.</p>
     
     {% if tutorial %}        
