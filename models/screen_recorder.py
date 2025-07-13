@@ -12,6 +12,11 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
+try:
+    import pyperclip
+except ImportError:
+    pyperclip = None
+
 # Get logger for this module
 logger = logging.getLogger(__name__)
 
@@ -729,4 +734,104 @@ class FocusTracker:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"Failed to log focus event: {e}")
-       
+
+
+class ClipboardTracker:
+    """
+    Cross-platform clipboard content tracker for study participants.
+    Logs clipboard content changes to a JSON file.
+    """
+    def __init__(self, logs_directory: str, study_stage: int, poll_interval: float = 1.0):
+        self.logs_directory = logs_directory
+        self.study_stage = study_stage
+        self.poll_interval = poll_interval
+        self.clipboard_log_path = os.path.join(logs_directory, f"clipboard_log_stage{study_stage}.json")
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._last_clipboard_content = None
+
+    def start(self):
+        """Start the clipboard monitoring thread."""
+        if self._thread and self._thread.is_alive():
+            return
+        
+        if pyperclip is None:
+            logger.warning("pyperclip package not available. Clipboard tracking disabled.")
+            return
+            
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._track_clipboard_loop, daemon=True)
+        self._thread.start()
+        logger.info(f"Started clipboard tracking for stage {self.study_stage}")
+
+    def stop(self):
+        """Stop the clipboard monitoring thread."""
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=2)
+        logger.info(f"Stopped clipboard tracking for stage {self.study_stage}")
+
+    def _track_clipboard_loop(self):
+        """Main loop for tracking clipboard changes."""
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    # Get current clipboard content
+                    current_content = self._get_clipboard_content()
+                    
+                    # Only log if content changed
+                    if current_content is not None and current_content != self._last_clipboard_content:
+                        self._log_clipboard_event(current_content)
+                        self._last_clipboard_content = current_content
+                        
+                except Exception as e:
+                    logger.warning(f"Error reading clipboard: {e}")
+                
+                time.sleep(self.poll_interval)
+                
+        except Exception as e:
+            logger.error(f"Error in clipboard tracking loop: {e}")
+
+    def _get_clipboard_content(self) -> Optional[str]:
+        """Get current clipboard content."""
+        try:
+            if pyperclip:
+                # Try to get text content from clipboard
+                content = pyperclip.paste()
+                if content and content.strip():
+                    return content
+        except Exception as e:
+            logger.debug(f"Could not read clipboard content: {e}")
+        return None
+
+    def _log_clipboard_event(self, content: str):
+        """Log a clipboard change event to the JSON file."""
+        event = {
+            "timestamp": datetime.now().isoformat(),
+            "content": content,
+            "content_length": len(content)
+        }
+        
+        try:
+            # Ensure logs directory exists
+            if not os.path.exists(self.logs_directory):
+                os.makedirs(self.logs_directory, exist_ok=True)
+            
+            # Load existing data or create new structure
+            if os.path.exists(self.clipboard_log_path):
+                with open(self.clipboard_log_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = {"clipboard_events": []}
+            
+            # Add new event
+            data["clipboard_events"].append(event)
+            
+            # Write back to file
+            with open(self.clipboard_log_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                
+            logger.debug(f"Logged clipboard event: {len(content)} characters")
+            
+        except Exception as e:
+            logger.warning(f"Failed to log clipboard event: {e}")

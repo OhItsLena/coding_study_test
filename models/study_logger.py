@@ -29,7 +29,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 from .github_service import GitHubService
 from .global_git_lock import get_participant_git_lock
-from .screen_recorder import ScreenRecorder, FocusTracker
+from .screen_recorder import ScreenRecorder, FocusTracker, ClipboardTracker
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ class StudyLogger:
         # Generate unique session ID for this app run
         self.session_id = self._generate_session_id()
         self.focus_tracker = None
+        self.clipboard_tracker = None
 
     def start_focus_tracking(self, participant_id: str, study_stage: int, development_mode: bool):
         """
@@ -68,6 +69,23 @@ class StudyLogger:
         if self.focus_tracker:
             self.focus_tracker.stop()
             self.focus_tracker = None
+
+    def start_clipboard_tracking(self, participant_id: str, study_stage: int, development_mode: bool):
+        """
+        Start background clipboard content tracking for the participant.
+        """
+        logs_directory = self.get_logs_directory_path(participant_id, development_mode)
+        if not self.clipboard_tracker:
+            self.clipboard_tracker = ClipboardTracker(logs_directory, study_stage)
+        self.clipboard_tracker.start()
+
+    def stop_clipboard_tracking(self):
+        """
+        Stop background clipboard content tracking.
+        """
+        if self.clipboard_tracker:
+            self.clipboard_tracker.stop()
+            self.clipboard_tracker = None
     
     def _run_git_command(self, repo_path: str, git_args: List[str], timeout: int = 10) -> subprocess.CompletedProcess:
         """
@@ -128,22 +146,25 @@ class StudyLogger:
         """
         # Skip screen recording and focus tracking in development mode
         if development_mode:
-            logger.info("Screen recording and focus tracking disabled in development mode")
+            logger.info("Screen recording, focus tracking, and clipboard tracking disabled in development mode")
             return True
         logs_directory = self.get_logs_directory_path(participant_id, development_mode)
         # Start focus tracking
         self.start_focus_tracking(participant_id, study_stage, development_mode)
+        # Start clipboard tracking
+        self.start_clipboard_tracking(participant_id, study_stage, development_mode)
         # Start screen recording
         return self.screen_recorder.start_recording(participant_id, study_stage, logs_directory)
     
     def stop_session_recording(self) -> bool:
         """
-        Stop the current session recording and focus tracking.
+        Stop the current session recording, focus tracking, and clipboard tracking.
         
         Returns:
             True if recording stopped successfully, False otherwise
         """
         self.stop_focus_tracking()
+        self.stop_clipboard_tracking()
         return self.screen_recorder.stop_recording()
     
     def is_recording_active(self) -> bool:
