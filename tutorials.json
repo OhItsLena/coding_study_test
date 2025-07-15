@@ -32,10 +32,10 @@
                 {
                 "title": "Change the Design Based on Vibes",
                 "video": "tutorial_vibe4.gif",
-                "instruction": "Use a free browser-based AI tool (like ChatGPT) to try different visual designs and see what fits the vibe of your app.",
+                "instruction": "Use a free browser-based AI tool (like ChatGPT or Mistral Le Chat) to try different visual designs and see what fits the vibe of your app.",
                 "example_prompt": "I don't like the design of this calculator app. It gives off a bad vibe. Make it old school and retro.",
                 "try_it_note": "Paste your code into a browser-based AI tool, describe the design you want, and bring the result back into your editor.",
-                "note": "You can also use the Copilot Chat to ask for design changes, but free browser-based AI tools are available to you as well."
+                "note": "Of course, you can also use the Copilot Chat to ask for design changes. However, free browser-based AI tools are available to you as well if you prefer this workflow."
                 },
                 {
                 "title": "Fix a Bug Using Copilot Agent",
