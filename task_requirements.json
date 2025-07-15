@@ -36,6 +36,12 @@
     },
     {
       "id": 6,
+      "title": "Reordering Files",
+      "description": "Let users reorder uploaded files.",
+      "details": []
+    },
+    {
+      "id": 7,
       "title": "Drag and Drop",
       "description": "Use drag and drop for upload and reordering.",
       "details": []
@@ -47,7 +53,6 @@
       "title": "Additional Functionality",
       "description": "Add features to your existing PDF Merger.",
       "details": [
-        "Let users reorder uploaded files",
         "Support selecting specific page ranges of uploaded files",
         "Display preview of selected pages before downloading"
       ]
@@ -60,14 +65,14 @@
     },
     {
       "id": 3,
-      "title": "File Compression",
-      "description": "Compress the resulting file to reduce its size and show compression savings.",
+      "title": "Split Mode",
+      "description": "Allow users to split PDFs into smaller files.",
       "details": []
     },
     {
       "id": 4,
-      "title": "Split Mode",
-      "description": "Allow users to split PDFs into smaller files.",
+      "title": "File Compression",
+      "description": "Compress the resulting file to reduce its size and show compression savings.",
       "details": []
     }
   ]
