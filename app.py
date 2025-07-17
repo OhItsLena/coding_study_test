@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, session, redirect, url_for, j
 from dotenv import load_dotenv
 from services import (
     load_task_requirements, get_tasks_for_stage, get_session_data, update_session_data,
-    get_coding_condition, get_study_stage, get_participant_id, open_vscode_with_repository,
+    get_coding_condition, get_study_stage, get_participant_id, get_prolific_code, open_vscode_with_repository,
     check_and_clone_repository, commit_code_changes, test_github_connectivity,
     setup_repository_for_stage, log_route_visit, should_log_route, mark_route_as_logged,
     mark_stage_transition, get_async_github_stats, get_async_github_queue_size,
@@ -78,6 +78,7 @@ DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'false').lower() == 'true'
 DEV_PARTICIPANT_ID = os.getenv('DEV_PARTICIPANT_ID', 'dev-participant-001')
 DEV_STAGE = int(os.getenv('DEV_STAGE', '1'))
 DEV_CODING_CONDITION = os.getenv('DEV_CODING_CONDITION', 'vibe')
+DEV_PROLIFIC_CODE = os.getenv('DEV_PROLIFIC_CODE', 'ABCDEFG')
 
 # Set up logging early
 LOG_FILEPATH = setup_logging(DEVELOPMENT_MODE)
@@ -470,7 +471,8 @@ def ux_questionnaire():
 def goodbye():
     participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
     study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
-    
+    prolific_code = get_prolific_code(DEVELOPMENT_MODE, DEV_PROLIFIC_CODE)
+
     # Check for automatic rerouting based on session history
     reroute = check_automatic_rerouting('goodbye', participant_id, study_stage, DEVELOPMENT_MODE)
     if reroute:
@@ -519,7 +521,8 @@ def goodbye():
     return render_template('goodbye.jinja', 
                          participant_id=participant_id,
                          study_stage=study_stage,
-                         coding_condition=coding_condition)
+                         coding_condition=coding_condition,
+                         prolific_code=prolific_code)
 
 @app.route('/tutorial')
 def tutorial():

@@ -138,3 +138,39 @@ class AzureMetadataService:
             logger.info(f"Error getting coding condition from Azure VM tags: {str(e)}")
             # Default to 'vibe' if we can't reach the metadata service or any other error occurs
             return "vibe"
+    
+    @classmethod
+    def get_prolific_code(cls, development_mode: bool, dev_prolific_code: str = "ABCDEFG") -> str:
+        """
+        Get the prolific_code from Azure VM tags using the Instance Metadata Service.
+        In development mode, returns the dev_prolific_code parameter.
+        
+        Args:
+            development_mode: Whether running in development mode
+            dev_prolific_code: Prolific code to use in development mode
+        
+        Returns:
+            The prolific completion code, defaults to 'ABCDEFG' if not found
+        """
+        if development_mode:
+            logger.info(f"Development mode: Using mocked prolific code: {dev_prolific_code}")
+            return dev_prolific_code
+        
+        try:
+            response = requests.get(cls.METADATA_URL_TAGS, headers=cls.HEADERS, timeout=cls.TIMEOUT)
+            
+            if response.status_code == 200:
+                tags_text = response.text
+                # Tags are returned as semicolon-separated key:value pairs
+                for tag in tags_text.split(';'):
+                    if ':' in tag:
+                        key, value = tag.split(':', 1)
+                        if key.strip().lower() == 'prolific_code':
+                            return value.strip()
+            
+            # Default to 'ABCDEFG' if tag not found
+            return "ABCDEFG"
+        except Exception as e:
+            logger.info(f"Error getting prolific code from Azure VM tags: {str(e)}")
+            # Default to 'ABCDEFG' if we can't reach the metadata service or any other error occurs
+            return "ABCDEFG"

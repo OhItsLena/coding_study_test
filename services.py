@@ -98,6 +98,11 @@ def get_participant_id(development_mode, dev_participant_id):
     return _azure_service.get_participant_id(development_mode, dev_participant_id)
 
 
+def get_prolific_code(development_mode, dev_prolific_code="ABCDEFG"):
+    """Get the prolific_code from Azure VM tags."""
+    return _azure_service.get_prolific_code(development_mode, dev_prolific_code)
+
+
 # GitHub Service Functions
 def get_authenticated_repo_url(repo_name, github_token, github_org):
     """Construct the authenticated GitHub repository URL."""
