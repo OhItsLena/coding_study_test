@@ -174,3 +174,39 @@ class AzureMetadataService:
             logger.info(f"Error getting prolific code from Azure VM tags: {str(e)}")
             # Default to 'ABCDEFG' if we can't reach the metadata service or any other error occurs
             return "ABCDEFG"
+    
+    @classmethod
+    def get_noconsent_code(cls, development_mode: bool, dev_noconsent_code: str = "NOCONSENT") -> str:
+        """
+        Get the noconsent_code from Azure VM tags using the Instance Metadata Service.
+        In development mode, returns the dev_noconsent_code parameter.
+        
+        Args:
+            development_mode: Whether running in development mode
+            dev_noconsent_code: No consent code to use in development mode
+        
+        Returns:
+            The no consent completion code, defaults to 'NOCONSENT' if not found
+        """
+        if development_mode:
+            logger.info(f"Development mode: Using mocked no consent code: {dev_noconsent_code}")
+            return dev_noconsent_code
+        
+        try:
+            response = requests.get(cls.METADATA_URL_TAGS, headers=cls.HEADERS, timeout=cls.TIMEOUT)
+            
+            if response.status_code == 200:
+                tags_text = response.text
+                # Tags are returned as semicolon-separated key:value pairs
+                for tag in tags_text.split(';'):
+                    if ':' in tag:
+                        key, value = tag.split(':', 1)
+                        if key.strip().lower() == 'noconsent_code':
+                            return value.strip()
+            
+            # Default to 'NOCONSENT' if tag not found
+            return "NOCONSENT"
+        except Exception as e:
+            logger.info(f"Error getting no consent code from Azure VM tags: {str(e)}")
+            # Default to 'NOCONSENT' if we can't reach the metadata service or any other error occurs
+            return "NOCONSENT"

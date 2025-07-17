@@ -103,6 +103,11 @@ def get_prolific_code(development_mode, dev_prolific_code="ABCDEFG"):
     return _azure_service.get_prolific_code(development_mode, dev_prolific_code)
 
 
+def get_noconsent_code(development_mode, dev_noconsent_code="NOCONSENT"):
+    """Get the noconsent_code from Azure VM tags."""
+    return _azure_service.get_noconsent_code(development_mode, dev_noconsent_code)
+
+
 # GitHub Service Functions
 def get_authenticated_repo_url(repo_name, github_token, github_org):
     """Construct the authenticated GitHub repository URL."""

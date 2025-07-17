@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, session, redirect, url_for, j
 from dotenv import load_dotenv
 from services import (
     load_task_requirements, get_tasks_for_stage, get_session_data, update_session_data,
-    get_coding_condition, get_study_stage, get_participant_id, get_prolific_code, open_vscode_with_repository,
+    get_coding_condition, get_study_stage, get_participant_id, get_prolific_code, get_noconsent_code, open_vscode_with_repository,
     check_and_clone_repository, commit_code_changes, test_github_connectivity,
     setup_repository_for_stage, log_route_visit, should_log_route, mark_route_as_logged,
     mark_stage_transition, get_async_github_stats, get_async_github_queue_size,
@@ -79,6 +79,7 @@ DEV_PARTICIPANT_ID = os.getenv('DEV_PARTICIPANT_ID', 'dev-participant-001')
 DEV_STAGE = int(os.getenv('DEV_STAGE', '1'))
 DEV_CODING_CONDITION = os.getenv('DEV_CODING_CONDITION', 'vibe')
 DEV_PROLIFIC_CODE = os.getenv('DEV_PROLIFIC_CODE', 'ABCDEFG')
+DEV_NOCONSENT_CODE = os.getenv('DEV_NOCONSENT_CODE', 'NOCONSENT')
 
 # Set up logging early
 LOG_FILEPATH = setup_logging(DEVELOPMENT_MODE)
@@ -255,8 +256,11 @@ def consent():
         return redirect(url_for('welcome_back'))
 
     if request.method == 'POST':
-        # Check if consent was given
-        if request.form.get('consent'):
+        # Check if both consent checkboxes were checked
+        understanding_checked = request.form.get('understanding')
+        data_consent_checked = request.form.get('data_consent')
+        
+        if understanding_checked and data_consent_checked:
             # Mark consent as given in session
             session['consent_given'] = True
 
@@ -274,8 +278,8 @@ def consent():
 
             return redirect(url_for('background_questionnaire'))
         else:
-            # If consent not given, redirect back to consent form
-            return redirect(url_for('consent'))
+            # If consent not given, redirect to no_consent page
+            return redirect(url_for('no_consent'))
 
     # Load consent data from JSON
     consent_data = {}
@@ -523,6 +527,36 @@ def goodbye():
                          study_stage=study_stage,
                          coding_condition=coding_condition,
                          prolific_code=prolific_code)
+
+@app.route('/no_consent')
+def no_consent():
+    participant_id = get_participant_id(DEVELOPMENT_MODE, DEV_PARTICIPANT_ID)
+    study_stage = get_study_stage(participant_id, DEVELOPMENT_MODE, DEV_STAGE)
+    noconsent_code = get_noconsent_code(DEVELOPMENT_MODE, DEV_NOCONSENT_CODE)
+    
+    # Log route visit if this is the first time
+    if should_log_route(session, 'no_consent', study_stage):
+        session_data = {
+            'consent_declined': True,
+            'no_consent_page_accessed': True
+        }
+        
+        log_route_visit(
+            participant_id=participant_id,
+            route_name='no_consent',
+            development_mode=DEVELOPMENT_MODE,
+            study_stage=study_stage,
+            session_data=session_data,
+            github_token=GITHUB_TOKEN,
+            github_org=GITHUB_ORG,
+            async_mode=ASYNC_GITHUB_MODE
+        )
+        mark_route_as_logged(session, 'no_consent', study_stage)
+    
+    return render_template('no_consent.jinja', 
+                         participant_id=participant_id,
+                         study_stage=study_stage,
+                         noconsent_code=noconsent_code)
 
 @app.route('/tutorial')
 def tutorial():

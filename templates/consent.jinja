@@ -183,34 +183,49 @@
     <h2>7. Informed Consent and Agreement</h2>
     <p>This consent form will be retained securely and in compliance with the GDPR for no longer than necessary.</p>
     
-    <p>I understand the explanation provided to me. I have been given a copy of this form. I have had all my questions answered to my satisfaction, and I voluntarily agree to participate in this online study.</p>
-    
-    <p>I voluntarily consent to my data being recorded and subsequently processed in line with the GDPR. I have been informed about the consequences of withdrawing my consent.</p>
-    
     <form method="POST" action="{{ url_for('consent') }}">
         <div class="consent-checkbox">
             <label>
-                <input type="checkbox" id="consent-check" name="consent" required>
-                I agree to participate in this study and consent to the data collection and processing as described above.
+                <input type="checkbox" id="understanding-check" name="understanding">
+                I understand the explanation provided to me. I have been given a copy of this form. I have had all my questions answered to my satisfaction, and I voluntarily agree to participate in this online study.
             </label>
         </div>
         
-        <button type="submit" class="consent-btn" id="continue-btn">Continue to Study</button>
+        <div class="consent-checkbox">
+            <label>
+                <input type="checkbox" id="data-consent-check" name="data_consent">
+                I voluntarily consent to my data being recorded and subsequently processed in line with the GDPR. I have been informed about the consequences of withdrawing my consent.
+            </label>
+        </div>
+        
+        <button type="submit" class="consent-btn" id="continue-btn">Continue Without Consent</button>
     </form>
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const checkbox = document.getElementById('consent-check');
+    const understandingCheck = document.getElementById('understanding-check');
+    const dataConsentCheck = document.getElementById('data-consent-check');
     const button = document.getElementById('continue-btn');
     
-    // Initially disable the button
-    button.disabled = true;
+    function updateButtonState() {
+        const bothChecked = understandingCheck.checked && dataConsentCheck.checked;
+        
+        if (bothChecked) {
+            button.textContent = 'Continue to Study';
+            button.disabled = false;
+        } else {
+            button.textContent = 'Continue Without Consent';
+            button.disabled = false;
+        }
+    }
     
-    // Enable/disable button based on checkbox state
-    checkbox.addEventListener('change', function() {
-        button.disabled = !this.checked;
-    });
+    // Initially set button state
+    updateButtonState();
+    
+    // Update button state when checkboxes change
+    understandingCheck.addEventListener('change', updateButtonState);
+    dataConsentCheck.addEventListener('change', updateButtonState);
 });
 </script>
 {% endblock %}

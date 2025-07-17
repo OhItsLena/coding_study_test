@@ -1,0 +1,99 @@
+{% extends "base.jinja" %}
+
+{% block title %}{{ participant_id }} - Study Not Consented{% endblock %}
+
+{% block additional_styles %}
+.completion-message {
+    font-size: 1.2em;
+    color: #d9534f;
+    margin-bottom: 25px;
+    font-weight: bold;
+}
+.stage-info {
+    background: #f8d7da;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 20px 0;
+    border-left: 4px solid #d9534f;
+}
+.thank-you-message {
+    font-size: 1.1em;
+    line-height: 1.6;
+    margin: 20px 0;
+}
+.thank-you-message h3 {
+    color: #d9534f;
+}
+.next-steps {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 5px;
+    margin: 25px 0;
+    text-align: left;
+}
+.next-steps h3 {
+    color: #333;
+    margin-bottom: 15px;
+    text-align: center;
+}
+.next-steps ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+.next-steps li {
+    margin-bottom: 8px;
+}
+.highlight {
+    color: #d9534f;
+    font-weight: bold;
+}
+.btn {
+    display: inline-block;
+    padding: 10px 20px;
+    margin: 15px 0;
+    background-color: #007bff;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.3s;
+}
+.btn:hover {
+    background-color: #0056b3;
+    text-decoration: none;
+    color: white;
+}
+.btn-primary {
+    background-color: #007bff;
+}
+.btn-primary:hover {
+    background-color: #0056b3;
+}
+{% endblock %}
+
+{% block content %}
+<div class="survey-card">
+    <h1>Study Participation Not Consented</h1>
+    <div class="participant-id">Participant ID: {{ participant_id }}</div>
+    
+    <div class="thank-you-message">
+        <h3>Thank you for your time</h3>
+        <p>We understand that you have chosen not to provide full consent for this study.
+        Unfortunately you cannot participate without giving consent to the collection of data.
+        Your decision is completely voluntary and respected. No data has been collected or stored.</p>
+        <p>Prolific return code: <strong>{{ noconsent_code }}</strong></p>
+        <p>Don't forget to return the study on Prolific with the code above. You may close the RDP connection now.</p>
+    </div>
+    
+    <div class="next-steps">
+        <h3>Changed your mind?</h3>
+        <p>If you would like to reconsider your decision and review the consent form again, you can:
+        <a href="{{ url_for('consent', participant_id=participant_id) }}">
+            Return to Consent Form
+        </a>
+        </p>
+    </div>
+</div>
+{% endblock %}
