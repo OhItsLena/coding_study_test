@@ -251,10 +251,6 @@ def consent():
         if reroute:
             return reroute
 
-    # Stage 2 participants should skip consent and go directly to welcome back screen
-    if study_stage == 2:
-        return redirect(url_for('welcome_back'))
-
     if request.method == 'POST':
         # Check if both consent checkboxes were checked
         understanding_checked = request.form.get('understanding')
@@ -276,7 +272,11 @@ def consent():
                 async_mode=ASYNC_GITHUB_MODE
             )
 
-            return redirect(url_for('background_questionnaire'))
+            # Redirect based on study stage
+            if study_stage == 1:
+                return redirect(url_for('background_questionnaire'))
+            else:  # study_stage == 2
+                return redirect(url_for('task'))
         else:
             # If consent not given, redirect to no_consent page
             return redirect(url_for('no_consent'))
