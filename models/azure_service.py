@@ -169,12 +169,12 @@ class AzureMetadataService:
                             return value.strip()
             
             # Default to 'ABCDEFG' if tag not found
-            return "ABCDEFG"
+            return None
         except Exception as e:
             logger.info(f"Error getting prolific code from Azure VM tags: {str(e)}")
             # Default to 'ABCDEFG' if we can't reach the metadata service or any other error occurs
-            return "ABCDEFG"
-    
+            return None
+
     @classmethod
     def get_noconsent_code(cls, development_mode: bool, dev_noconsent_code: str = "NOCONSENT") -> str:
         """
@@ -205,8 +205,8 @@ class AzureMetadataService:
                             return value.strip()
             
             # Default to 'NOCONSENT' if tag not found
-            return "NOCONSENT"
+            return None
         except Exception as e:
             logger.info(f"Error getting no consent code from Azure VM tags: {str(e)}")
             # Default to 'NOCONSENT' if we can't reach the metadata service or any other error occurs
-            return "NOCONSENT"
+            return None
