@@ -909,6 +909,19 @@ class StudyLogger:
             if not os.path.exists(vscode_logs_dir):
                 os.makedirs(vscode_logs_dir)
             
+            # Copy proxy.txt file if it exists
+            proxy_file_path = r"C:\Users\studyuser\proxy.txt"
+            proxy_dest_path = os.path.join(vscode_logs_dir, f"proxy_stage{study_stage}.txt")
+            if os.path.exists(proxy_file_path):
+                try:
+                    import shutil
+                    shutil.copy2(proxy_file_path, proxy_dest_path)
+                    logger.info(f"Successfully copied proxy.txt to {proxy_dest_path}")
+                except Exception as e:
+                    logger.info(f"Failed to copy proxy.txt: {str(e)}")
+            else:
+                logger.info(f"Proxy file not found at: {proxy_file_path}")
+            
             # Create timestamped archive filename
             timestamp = datetime.now()
             archive_filename = f"workspace_storage_stage{study_stage}_{timestamp.strftime('%Y%m%d_%H%M%S')}.zip"
