@@ -149,9 +149,9 @@ h1 {
     {% endif %}
    </div>
 
-    <p>Now please complete the following tutorial steps to get to know your development environment. A tutorial workspace opens automatically in Visual Studio Code. If it doesn't: <a href="/open-vscode-tutorial" class="open-vscode-btn no-loading">Open VS Code</a>.</p>
-    
-    {% if tutorial %}        
+    <p>Now please complete the following tutorial steps to get to know your development environment. You will build a simple calculator application with HTML, CSS, and JavaScript. A tutorial workspace opens automatically in Visual Studio Code. If it doesn't: <a href="/open-vscode-tutorial" class="open-vscode-btn no-loading">Open VS Code</a>.</p>
+
+    {% if tutorial %}
         {% for step in tutorial.steps %}
         <div class="tutorial-step">
             <h3>{{ loop.index }}. {{ step.title }}</h3>
