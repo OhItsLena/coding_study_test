@@ -912,15 +912,25 @@ class StudyLogger:
             # Copy proxy.txt file if it exists
             proxy_file_path = r"C:\Users\studyuser\proxy.txt"
             proxy_dest_path = os.path.join(vscode_logs_dir, f"proxy_stage{study_stage}.txt")
+            proxy_copied = False
             if os.path.exists(proxy_file_path):
                 try:
                     import shutil
                     shutil.copy2(proxy_file_path, proxy_dest_path)
                     logger.info(f"Successfully copied proxy.txt to {proxy_dest_path}")
+                    proxy_copied = True
                 except Exception as e:
                     logger.info(f"Failed to copy proxy.txt: {str(e)}")
             else:
                 logger.info(f"Proxy file not found at: {proxy_file_path}")
+            
+            # Add proxy file to git immediately after copying
+            if proxy_copied:
+                result = self._run_git_command(logs_path, ['add', proxy_dest_path], timeout=5)
+                if result.returncode == 0:
+                    logger.info(f"Added proxy file to git: {proxy_dest_path}")
+                else:
+                    logger.warning(f"Failed to add proxy file to git: {result.stderr}")
             
             # Create timestamped archive filename
             timestamp = datetime.now()
