@@ -8,7 +8,7 @@ A Flask-based web application for orchestrating coding studies. This includes da
 - `services.py` - Core business logic and services
 - `models/` - Data models and service classes
 - `templates/` - Jinja2 HTML templates
-- `static/` - Static assets (CSS, JS, images)
+- `static/` - Static assets (images, favicon)
 - `logs/` - Application logs
 - `vm-tools/` - Scripts that are copied to and run on the VM instances
 - `task_requirements.json` - Task definitions and requirements
@@ -17,19 +17,13 @@ A Flask-based web application for orchestrating coding studies. This includes da
 
 ## Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/OhItsLena/coding_study_test.git
-   cd coding_study_test_tool
-   ```
-
-2. Create and activate a virtual environment:
+1. Create and activate a virtual environment:
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
-3. Install dependencies:
+2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
