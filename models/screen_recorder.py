@@ -5,17 +5,13 @@ import platform
 import shutil
 import time
 import logging
-
+import pyperclip
 import time
 import threading
 import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-try:
-    import pyperclip
-except ImportError:
-    pyperclip = None
 
 # Get logger for this module
 logger = logging.getLogger(__name__)

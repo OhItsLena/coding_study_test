@@ -1,8 +1,3 @@
-"""
-Service facade for the coding study Flask application.
-This module provides a simplified interface to the new object-oriented models.
-"""
-
 import logging
 from models.task_manager import TaskManager, SessionManager
 from models.participant_manager import ParticipantManager
@@ -10,7 +5,6 @@ from models.azure_service import AzureMetadataService
 from models.github_service import GitHubService
 from models.repository_manager import RepositoryManager, VSCodeManager
 from models.study_logger import StudyLogger, SessionTracker
-from models.async_github_service import AsyncGitHubService
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -24,9 +18,6 @@ _repository_manager = RepositoryManager(_github_service)
 _vscode_manager = VSCodeManager(_repository_manager)
 _study_logger = StudyLogger(_github_service)
 _session_tracker = SessionTracker()
-
-# Initialize async GitHub service
-_async_github_service = AsyncGitHubService(_github_service, _study_logger, _repository_manager)
 
 
 # Task Management Functions
@@ -139,19 +130,12 @@ def setup_repository_for_stage(participant_id, study_stage, development_mode, gi
     )
 
 
-def commit_code_changes(participant_id, study_stage, commit_message, development_mode, github_token, github_org, async_mode=True):
+def commit_code_changes(participant_id, study_stage, commit_message, development_mode, github_token, github_org):
     """Commit any changes in the participant's repository."""
-    if async_mode:
-        # Queue the operation for background processing
-        _async_github_service.queue_commit_code_changes(
-            participant_id, study_stage, commit_message, development_mode, github_token, github_org
-        )
-        return True  # Return immediately
-    else:
-        # Synchronous processing
-        return _repository_manager.commit_and_backup_all(
-            participant_id, study_stage, commit_message, development_mode, github_token, github_org
-        )
+    # Use synchronous processing only
+    return _repository_manager.commit_and_backup_all(
+        participant_id, study_stage, commit_message, development_mode, github_token, github_org
+    )
 
 
 def push_code_changes(participant_id, study_stage, development_mode, github_token, github_org):
@@ -187,19 +171,12 @@ def setup_tutorial_repository(participant_id, development_mode, github_token, gi
     )
 
 
-def commit_tutorial_completion(participant_id, development_mode, github_token, github_org, async_mode=True):
+def commit_tutorial_completion(participant_id, development_mode, github_token, github_org):
     """Commit tutorial completion to the tutorial repository."""
-    if async_mode:
-        # Queue the operation for background processing
-        _async_github_service.queue_commit_tutorial_completion(
-            participant_id, development_mode, github_token, github_org
-        )
-        return True  # Return immediately
-    else:
-        # Synchronous processing
-        return _repository_manager.commit_tutorial_completion(
-            participant_id, development_mode, github_token, github_org
-        )
+    # Use synchronous processing only
+    return _repository_manager.commit_tutorial_completion(
+        participant_id, development_mode, github_token, github_org
+    )
 
 
 def open_vscode_with_tutorial(participant_id, development_mode):
@@ -221,21 +198,13 @@ def ensure_logging_repository(participant_id, development_mode, github_token, gi
 
 
 def log_route_visit(participant_id, route_name, development_mode, study_stage, 
-                   session_data=None, github_token=None, github_org=None, async_mode=True):
+                   session_data=None, github_token=None, github_org=None):
     """Log a route visit with timestamp and relevant context."""
-    if async_mode:
-        # Queue the operation for background processing
-        _async_github_service.queue_log_route_visit(
-            participant_id, route_name, development_mode, study_stage,
-            session_data, github_token, github_org
-        )
-        return True  # Return immediately
-    else:
-        # Synchronous processing
-        return _study_logger.log_route_visit(
-            participant_id, route_name, development_mode, study_stage, 
-            session_data, github_token, github_org
-        )
+    # Use synchronous processing only
+    return _study_logger.log_route_visit(
+        participant_id, route_name, development_mode, study_stage, 
+        session_data, github_token, github_org
+    )
 
 
 def push_logs_to_remote(participant_id, development_mode, github_token, github_org):
@@ -244,19 +213,12 @@ def push_logs_to_remote(participant_id, development_mode, github_token, github_o
 
 
 def mark_stage_transition(participant_id, from_stage, to_stage, development_mode, 
-                         github_token=None, github_org=None, async_mode=True):
+                         github_token=None, github_org=None):
     """Mark a stage transition in the logs for explicit tracking."""
-    if async_mode:
-        # Queue the operation for background processing
-        _async_github_service.queue_mark_stage_transition(
-            participant_id, from_stage, to_stage, development_mode, github_token, github_org
-        )
-        return True  # Return immediately
-    else:
-        # Synchronous processing
-        return _study_logger.mark_stage_transition(
-            participant_id, from_stage, to_stage, development_mode, github_token, github_org
-        )
+    # Use synchronous processing only
+    return _study_logger.mark_stage_transition(
+        participant_id, from_stage, to_stage, development_mode, github_token, github_org
+    )
 
 
 def get_stage_transition_history(participant_id, development_mode):
@@ -270,15 +232,6 @@ def save_vscode_workspace_storage(participant_id, study_stage, development_mode,
     return _study_logger.save_vscode_workspace_storage(
         participant_id, study_stage, development_mode, github_token, github_org
     )
-
-
-def save_vscode_workspace_storage_async(participant_id, study_stage, development_mode, 
-                                      github_token=None, github_org=None):
-    """Save VS Code workspace storage asynchronously."""
-    _async_github_service.queue_save_vscode_workspace_storage(
-        participant_id, study_stage, development_mode, github_token, github_org
-    )
-    return True  # Return immediately
 
 
 def get_vscode_workspace_storage_path():
@@ -316,39 +269,6 @@ def upload_session_recording_to_azure(participant_id, study_stage):
 def is_recording_active():
     """Check if a recording is currently active."""
     return _study_logger.is_recording_active()
-
-
-# Async GitHub Service Management Functions
-def get_async_github_stats():
-    """Get statistics about the async GitHub operation queue."""
-    return _async_github_service.get_stats()
-
-
-def get_async_github_queue_size():
-    """Get the current size of the async GitHub operation queue."""
-    return _async_github_service.get_queue_size()
-
-
-def wait_for_async_github_completion(timeout=None):
-    """Wait for all queued GitHub operations to complete."""
-    return _async_github_service.wait_for_completion(timeout)
-
-
-def stop_async_github_service():
-    """Stop the async GitHub service worker thread."""
-    return _async_github_service.stop_worker()
-
-
-def restart_async_github_service():
-    """Restart the async GitHub service worker thread."""
-    _async_github_service.stop_worker()
-    _async_github_service.start_worker()
-
-
-def test_github_connectivity_async(participant_id, github_token, github_org):
-    """Test GitHub connectivity asynchronously."""
-    _async_github_service.queue_test_connectivity(participant_id, github_token, github_org)
-    return True  # Return immediately
 
 
 def get_session_log_history(participant_id, development_mode, study_stage):
